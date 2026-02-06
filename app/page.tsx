@@ -9,6 +9,7 @@ import {
   BookMarked,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 function BookIcon({ className }: { className?: string }) {
   return (
@@ -159,21 +160,21 @@ export default function Home() {
 
             {/* URL input */}
             <div className="animate-fade-in-up animation-delay-200 mt-10 flex flex-col gap-3 sm:flex-row">
-              <div className="group flex h-14 flex-1 items-center gap-3 rounded-xl border border-border bg-card/60 px-4 shadow-sm backdrop-blur-sm transition-all duration-300 focus-within:border-primary/40 focus-within:shadow-md focus-within:shadow-primary/5 sm:h-13">
+              <div className="group flex h-12 flex-1 items-center gap-3 rounded-xl border border-border bg-card/60 px-4 shadow-sm backdrop-blur-sm transition-all duration-300 focus-within:border-primary/40 focus-within:shadow-md focus-within:shadow-primary/5 sm:h-13">
                 <span className="select-none font-mono text-xs text-muted-foreground/50">
                   https://
                 </span>
-                <input
+                <Input
                   type="url"
                   placeholder="paste an article link…"
-                  className="h-full flex-1 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground/40 sm:text-sm"
+                  className="h-full flex-1 border-0 bg-transparent px-0 text-base shadow-none outline-none ring-0 placeholder:text-muted-foreground/40 focus-visible:ring-0 sm:text-sm"
                   aria-label="Article URL"
                   disabled
                 />
               </div>
               <Button
                 size="lg"
-                className="h-14 gap-2 rounded-xl px-7 text-sm font-semibold shadow-md shadow-primary/10 transition-shadow hover:shadow-lg hover:shadow-primary/20 sm:h-13"
+                className="h-12 gap-2 rounded-xl px-7 text-sm font-semibold shadow-md shadow-primary/10 transition-shadow hover:shadow-lg hover:shadow-primary/20 sm:h-13"
               >
                 Read now
                 <ArrowRight className="size-4" />
