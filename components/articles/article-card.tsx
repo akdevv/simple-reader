@@ -10,19 +10,41 @@ import {
   LuClock,
   LuBookCheck,
   LuBookOpen,
+  LuEllipsisVertical,
+  LuShare2,
+  LuTrash2,
 } from "react-icons/lu";
 import { CgSpinnerAlt } from "react-icons/cg";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import axios from "axios";
 
 interface ArticleCardProps {
   article: Article;
   onUpdate: (id: string, updates: Partial<Article>) => void;
+  onDelete?: (id: string) => void;
 }
 
-export function ArticleCard({ article, onUpdate }: ArticleCardProps) {
+export function ArticleCard({ article, onUpdate, onDelete }: ArticleCardProps) {
   const [favLoading, setFavLoading] = useState(false);
   const [readLoading, setReadLoading] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const toggleFavourite = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -55,6 +77,26 @@ export function ArticleCard({ article, onUpdate }: ArticleCardProps) {
       // silently fail
     } finally {
       setReadLoading(false);
+    }
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    setDeleteLoading(true);
+    try {
+      await axios.delete(`/api/article/${article.id}`);
+      onDelete?.(article.id);
+      setDeleteDialogOpen(false);
+    } catch {
+      // silently fail
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -123,6 +165,39 @@ export function ArticleCard({ article, onUpdate }: ArticleCardProps) {
                 />
               )}
             </button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  className="rounded-md p-1.5 text-muted-foreground/50 transition-colors hover:bg-muted/50 hover:text-foreground"
+                  title="More actions"
+                >
+                  <LuEllipsisVertical className="size-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.preventDefault();
+                    // Share – to be implemented later
+                  }}
+                >
+                  <LuShare2 className="size-3.5" />
+                  Share
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={handleDeleteClick}
+                >
+                  <LuTrash2 className="size-3.5" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -165,6 +240,34 @@ export function ArticleCard({ article, onUpdate }: ArticleCardProps) {
           </span>
         </div>
       </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete article?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove this article. This action cannot be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={(e) => e.stopPropagation()}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              disabled={deleteLoading}
+            >
+              {deleteLoading ? (
+                <CgSpinnerAlt className="size-3.5 animate-spin" />
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Link>
   );
 }

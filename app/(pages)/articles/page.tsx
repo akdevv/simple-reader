@@ -91,6 +91,10 @@ export default function ArticlesPage() {
     );
   };
 
+  const handleArticleDelete = (id: string) => {
+    setArticles((prev) => prev.filter((a) => a.id !== id));
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -180,6 +184,7 @@ export default function ArticlesPage() {
                 key={article.id}
                 article={article}
                 onUpdate={handleArticleUpdate}
+                onDelete={handleArticleDelete}
               />
             ))}
           </div>
