@@ -59,7 +59,7 @@ export function ArticleLinkInput() {
 
       const response = await axios.post<{ data: { id: string } }>(
         "/api/article",
-        body
+        body,
       );
 
       if (response.status === 200 && response.data.data.id) {
@@ -97,7 +97,7 @@ export function ArticleLinkInput() {
           placeholder="Paste a link or text…"
           rows={1}
           disabled={loading}
-          className="h-13 min-h-13 max-h-[200px] flex-1 resize-none overflow-y-auto rounded-xl border border-border/80 bg-card/80 px-5 py-3.5 text-base shadow-md backdrop-blur-sm transition-all duration-300 placeholder:text-muted-foreground/40 focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:opacity-50"
+          className="h-13 min-h-13 max-h-[200px] flex-1 resize-none overflow-y-auto rounded-xl border border-border/80 bg-card/80 px-5 py-3.5 text-base shadow-md backdrop-blur-sm transition-all duration-300 placeholder:text-muted-foreground/40 focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:opacity-50 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]"
           aria-label="Article URL or text content"
         />
         <Button

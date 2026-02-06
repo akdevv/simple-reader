@@ -91,8 +91,8 @@ export default function Home() {
             <div className="mt-16 grid gap-6 sm:grid-cols-3 sm:gap-5">
               <StepCard
                 number="01"
-                title="Paste a link"
-                description="Drop in any article URL — blogs, news, newsletters, essays."
+                title="Paste a link or your content"
+                description="Drop in any article URL, or paste the text directly — we'll make it readable either way."
                 icon={<LuLink2 className="size-4" />}
               />
               <StepCard
