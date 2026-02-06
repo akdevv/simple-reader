@@ -12,7 +12,7 @@ import {
   detectVideoProvider,
   getEmbedUrl,
 } from "./text-extractor";
-import { isContentImage } from "./media-rules";
+import { isContentImage, isInHead, isSvgImageUrl } from "./media-rules";
 
 /**
  * Extract images, videos, and GIFs from the **original full-page HTML** that
@@ -33,6 +33,13 @@ export function extractMediaFromFullPage(
   let leadImage: ArticleSection | null = null;
   const extraSections: ArticleSection[] = [];
 
+  // URLs of images used in <link rel="preload" as="image"> — drop these as content
+  const preloadImageUrls = new Set<string>();
+  document.querySelectorAll('link[rel="preload"][as="image"]').forEach((link) => {
+    const href = link.getAttribute("href");
+    if (href) preloadImageUrls.add(resolveUrl(href.trim(), baseUrl));
+  });
+
   // --- OG / meta tags ---
 
   // 1. OG image / twitter:image — usually the hero/lead image
@@ -43,7 +50,11 @@ export function extractMediaFromFullPage(
 
   if (ogImage) {
     const resolved = resolveUrl(ogImage.trim(), baseUrl);
-    if (!existingUrls.has(resolved)) {
+    if (
+      !existingUrls.has(resolved) &&
+      !preloadImageUrls.has(resolved) &&
+      !isSvgImageUrl(resolved)
+    ) {
       existingUrls.add(resolved);
       const ogAlt =
         document.querySelector('meta[property="og:image:alt"]')?.getAttribute("content") ||
@@ -74,9 +85,11 @@ export function extractMediaFromFullPage(
 
   // 3. Scan all <img> tags for content images (including GIFs)
   document.querySelectorAll("img").forEach((img) => {
+    if (isInHead(document, img)) return;
     const imgUrl = getImageUrl(img, baseUrl);
     if (!imgUrl) return;
     if (existingUrls.has(imgUrl)) return;
+    if (preloadImageUrls.has(imgUrl)) return;
     if (!isContentImage(img, imgUrl)) return;
 
     existingUrls.add(imgUrl);
@@ -89,10 +102,16 @@ export function extractMediaFromFullPage(
 
   // 4. Scan <picture> elements
   document.querySelectorAll("picture").forEach((picture) => {
+    if (isInHead(document, picture)) return;
     const innerImg = picture.querySelector("img");
     if (innerImg) {
       const imgUrl = getImageUrl(innerImg, baseUrl);
-      if (imgUrl && !existingUrls.has(imgUrl) && isContentImage(innerImg, imgUrl)) {
+      if (
+        imgUrl &&
+        !existingUrls.has(imgUrl) &&
+        !preloadImageUrls.has(imgUrl) &&
+        isContentImage(innerImg, imgUrl)
+      ) {
         existingUrls.add(imgUrl);
         extraSections.push({
           type: "image",
@@ -108,7 +127,12 @@ export function extractMediaFromFullPage(
       const srcset = source.getAttribute("srcset");
       if (srcset) {
         const parsed = parseSrcset(srcset, baseUrl);
-        if (parsed && !existingUrls.has(parsed)) {
+        if (
+          parsed &&
+          !existingUrls.has(parsed) &&
+          !preloadImageUrls.has(parsed) &&
+          !isSvgImageUrl(parsed)
+        ) {
           existingUrls.add(parsed);
           extraSections.push({ type: "image", url: parsed });
         }
@@ -118,6 +142,7 @@ export function extractMediaFromFullPage(
 
   // 5. Scan <video> elements Readability may have stripped
   document.querySelectorAll("video").forEach((video) => {
+    if (isInHead(document, video)) return;
     const src =
       video.getAttribute("src") ||
       video.getAttribute("data-src") ||
@@ -137,6 +162,7 @@ export function extractMediaFromFullPage(
 
   // 6. Scan <iframe> elements for YouTube/Vimeo embeds Readability dropped
   document.querySelectorAll("iframe").forEach((iframe) => {
+    if (isInHead(document, iframe)) return;
     const src =
       iframe.getAttribute("src") ||
       iframe.getAttribute("data-src") ||
@@ -156,6 +182,7 @@ export function extractMediaFromFullPage(
 
   // 7. Scan <noscript> blocks for hidden images/videos
   document.querySelectorAll("noscript").forEach((noscript) => {
+    if (isInHead(document, noscript)) return;
     const inner = noscript.textContent || "";
     if (!inner.includes("<img") && !inner.includes("<video") && !inner.includes("<iframe")) return;
     const noscriptDom = new JSDOM(`<body>${inner}</body>`);
@@ -163,7 +190,12 @@ export function extractMediaFromFullPage(
 
     noscriptBody.querySelectorAll("img").forEach((img) => {
       const imgUrl = getImageUrl(img, baseUrl);
-      if (imgUrl && !existingUrls.has(imgUrl) && isContentImage(img, imgUrl)) {
+      if (
+        imgUrl &&
+        !existingUrls.has(imgUrl) &&
+        !preloadImageUrls.has(imgUrl) &&
+        isContentImage(img, imgUrl)
+      ) {
         existingUrls.add(imgUrl);
         extraSections.push({
           type: "image",

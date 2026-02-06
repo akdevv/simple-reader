@@ -9,7 +9,7 @@ import {
   TableSection,
   CodeSection,
 } from "@/lib/types/article";
-import { codeToHtml } from "shiki";
+import { codeToHtml } from "shiki/bundle/web";
 import { CgSpinnerAlt } from "react-icons/cg";
 import {
   LuExternalLink,
@@ -331,30 +331,100 @@ function SectionRenderer({ section }: { section: ArticleSection }) {
 
 // ─── Code Block with Syntax Highlighting ────────────────────────────────────
 
+/**
+ * Detect programming language from code content (client-side fallback)
+ */
+function detectCodeLanguage(code: string): string {
+  const trimmed = code.trim();
+
+  // Shell/Bash commands
+  if (
+    /^(npm|npx|yarn|pnpm|bun|pip|cargo|go|docker|git|curl|wget|cd|ls|mkdir|rm|cp|mv|cat|echo|export|source)\s/.test(trimmed) ||
+    /^\$\s/.test(trimmed) ||
+    /^(sudo|apt|brew|dnf|yum)\s/.test(trimmed)
+  ) {
+    return 'bash';
+  }
+
+  // JavaScript/TypeScript patterns
+  if (
+    /^(import|export|const|let|var|function|class|interface|type|async|await)\s/.test(trimmed) ||
+    /console\.(log|error|warn|info)/.test(trimmed) ||
+    /^\s*(\/\/|\/\*)/.test(trimmed)
+  ) {
+    return trimmed.includes('interface') || trimmed.includes('type ') ? 'typescript' : 'javascript';
+  }
+
+  // Python
+  if (
+    /^(def|class|import|from|if|elif|else|for|while|try|except|with|return|print)\s/.test(trimmed) ||
+    /^#\s/.test(trimmed)
+  ) {
+    return 'python';
+  }
+
+  // SQL
+  if (/^(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|FROM|WHERE|JOIN)\s/i.test(trimmed)) {
+    return 'sql';
+  }
+
+  // JSON
+  if (/^\{[\s\S]*"[\w-]+"[\s\S]*:/.test(trimmed) || /^\[[\s\S]*\{/.test(trimmed)) {
+    return 'json';
+  }
+
+  // HTML/XML
+  if (/^<(!DOCTYPE|html|div|span|p|h[1-6]|a|img|svg)/i.test(trimmed)) {
+    return 'html';
+  }
+
+  // CSS
+  if (/^\s*[.#]?[\w-]+\s*\{/.test(trimmed) || /@(media|import|keyframes)/.test(trimmed)) {
+    return 'css';
+  }
+
+  return 'plaintext';
+}
+
 function CodeBlock({ section }: { section: CodeSection }) {
   const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
+    setIsLoading(true);
 
     async function highlight() {
+      // Auto-detect language if not specified
+      const lang = section.language || detectCodeLanguage(section.content);
+
       try {
         const html = await codeToHtml(section.content, {
-          lang: section.language || "text",
+          lang: lang,
           theme: "vitesse-dark",
         });
-        if (!cancelled) setHighlightedHtml(html);
+
+        if (!cancelled) {
+          setHighlightedHtml(html);
+          setIsLoading(false);
+        }
       } catch {
-        // Fallback: if language isn't supported, try plain text
+        // Fallback: if language isn't supported, try plaintext
         try {
           const html = await codeToHtml(section.content, {
-            lang: "text",
+            lang: "plaintext",
             theme: "vitesse-dark",
           });
-          if (!cancelled) setHighlightedHtml(html);
+          if (!cancelled) {
+            setHighlightedHtml(html);
+            setIsLoading(false);
+          }
         } catch {
-          // Give up on highlighting
+          if (!cancelled) {
+            setHighlightedHtml(null);
+            setIsLoading(false);
+          }
         }
       }
     }
@@ -404,12 +474,18 @@ function CodeBlock({ section }: { section: CodeSection }) {
       {/* Code content */}
       {highlightedHtml ? (
         <div
-          className="code-highlight overflow-x-auto px-5 py-4 text-[13px] leading-[1.7] [&_pre]:!bg-transparent [&_pre]:!m-0 [&_pre]:!p-0 [&_code]:!bg-transparent"
+          className="code-highlight overflow-x-auto px-5 py-4 text-[13px] leading-[1.7]"
           dangerouslySetInnerHTML={{ __html: highlightedHtml }}
         />
+      ) : isLoading ? (
+        <div className="overflow-x-auto px-5 py-4 text-[13px] leading-[1.7] font-mono text-white/70">
+          <div className="animate-pulse">Loading syntax highlighting...</div>
+        </div>
       ) : (
         <pre className="overflow-x-auto px-5 py-4 text-[13px] leading-[1.7] font-mono text-white/70">
-          <code>{section.content}</code>
+          <code style={{ whiteSpace: "pre", tabSize: 2 }}>
+            {section.content}
+          </code>
         </pre>
       )}
     </div>
@@ -456,21 +532,21 @@ function RichText({ text }: { text: string }) {
           className="text-primary underline decoration-primary/25 underline-offset-[3px] transition-all hover:decoration-primary/60"
         >
           {match[1]}
-        </a>
+        </a>,
       );
     } else if (match[3] !== undefined) {
       // Bold: **text**
       parts.push(
         <strong key={key} className="font-semibold text-foreground">
           {match[3]}
-        </strong>
+        </strong>,
       );
     } else if (match[4] !== undefined) {
       // Italic: *text*
       parts.push(
         <em key={key} className="italic">
           {match[4]}
-        </em>
+        </em>,
       );
     } else if (match[5] !== undefined) {
       // Inline code: `code`
@@ -480,14 +556,14 @@ function RichText({ text }: { text: string }) {
           className="inline-block rounded-md bg-muted/60 border border-border/40 px-1.5 py-0.5 font-mono text-[0.85em] text-primary/90"
         >
           {match[5]}
-        </code>
+        </code>,
       );
     } else if (match[6] !== undefined) {
       // Strikethrough: ~~text~~
       parts.push(
         <del key={key} className="text-muted-foreground line-through">
           {match[6]}
-        </del>
+        </del>,
       );
     }
 

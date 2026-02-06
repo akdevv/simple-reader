@@ -250,12 +250,35 @@
   background: oklch(1 0 0 / 0.2);
 }
 
-/* Shiki output normalization */
-.code-highlight pre {
-  background: transparent !important;
+/* Code block whitespace preservation - CRITICAL */
+.code-block pre,
+.code-block pre code,
+.code-block code {
+  white-space: pre !important;
+  tab-size: 2 !important;
+  -moz-tab-size: 2;
 }
-.code-highlight code {
-  font-family: var(--font-mono);
+
+/* Shiki output - the component injects a <pre class="shiki"> */
+.code-highlight pre.shiki {
+  background: transparent !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.code-highlight pre.shiki code {
+  font-family: var(--font-mono) !important;
+  display: block;
+}
+
+/* Shiki uses <span class="line"> for each line */
+.code-highlight .line {
+  display: block;
+}
+
+/* Ensure all spans inside code preserve formatting */
+.code-highlight span {
+  white-space: pre !important;
 }
 
 /* Table horizontal scroll hint */

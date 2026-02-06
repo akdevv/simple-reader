@@ -10,6 +10,11 @@ import {
   isRelatedContentSection,
   hasProtectedContent,
   stripUiChrome,
+  detectCodeLanguage,
+  isComplexCodeBlock,
+  extractCodeFromComplexBlock,
+  isCalloutBlock,
+  extractCallout,
 } from "./text-rules";
 
 // --- Shared helpers (also used by media-extractor) ---
@@ -153,6 +158,34 @@ export function htmlToSections(
       const el = node as Element;
       const tag = el.tagName.toUpperCase();
 
+      // Check for complex code blocks first (before switch)
+      if (isComplexCodeBlock(el)) {
+        const extracted = extractCodeFromComplexBlock(el);
+        if (extracted) {
+          const lang = extracted.language || detectCodeLanguage(extracted.code);
+          sections.push({
+            type: "code",
+            content: extracted.code,
+            language: lang,
+          });
+          continue;
+        }
+      }
+
+      // Check for callout/admonition blocks
+      if (isCalloutBlock(el)) {
+        const callout = extractCallout(el);
+        if (callout) {
+          // Render callout as blockquote with type prefix
+          const prefix = `💡 ${callout.type.toUpperCase()}: `;
+          sections.push({
+            type: "blockquote",
+            content: prefix + callout.content,
+          });
+          continue;
+        }
+      }
+
       switch (tag) {
         case "H1":
         case "H2":
@@ -292,10 +325,74 @@ export function htmlToSections(
 
         case "PRE": {
           const code = el.querySelector("code");
-          const text = (code || el).textContent || "";
-          const lang =
+          const targetEl = code || el;
+
+          // Extract text preserving structure
+          let text = "";
+
+          // Remove all non-content elements (buttons, SVGs, etc.)
+          const clone = targetEl.cloneNode(true) as Element;
+          clone.querySelectorAll("button, svg, img, span.line-number, .copy-button, .toolbar").forEach(el => el.remove());
+
+          // Process the cleaned HTML
+          const processNode = (node: Node): string => {
+            if (node.nodeType === 3) {
+              // Text node
+              return node.textContent || "";
+            }
+
+            if (node.nodeType === 1) {
+              const element = node as Element;
+              const tag = element.tagName.toLowerCase();
+
+              // Convert <br> to newline
+              if (tag === "br") {
+                return "\n";
+              }
+
+              // Skip UI elements
+              if (["button", "svg", "img"].includes(tag)) {
+                return "";
+              }
+
+              // For divs/spans that represent lines, add newline after
+              if ((tag === "div" || element.classList.contains("line")) && element.childNodes.length > 0) {
+                let content = "";
+                for (const child of Array.from(element.childNodes)) {
+                  content += processNode(child);
+                }
+                // Add newline after line divs, but not if it's the last element
+                return content + (element.nextSibling ? "\n" : "");
+              }
+
+              // For other elements, just process children
+              let content = "";
+              for (const child of Array.from(element.childNodes)) {
+                content += processNode(child);
+              }
+              return content;
+            }
+
+            return "";
+          };
+
+          text = processNode(clone);
+
+          // Decode HTML entities
+          const tempDiv = dom.window.document.createElement("div");
+          tempDiv.innerHTML = text;
+          text = tempDiv.textContent || "";
+
+          // Try to get language from class attribute, otherwise auto-detect
+          let lang =
             code?.getAttribute("class")?.match(/language-(\w+)/)?.[1] ||
             undefined;
+
+          // Auto-detect language if not specified
+          if (!lang && text.trim()) {
+            lang = detectCodeLanguage(text);
+          }
+
           if (text.trim()) {
             sections.push({
               type: "code",
@@ -306,7 +403,16 @@ export function htmlToSections(
           break;
         }
 
-        case "CODE":
+        case "CODE": {
+          // Only handle inline code (not inside PRE)
+          if (el.parentElement?.tagName === "PRE") break;
+          const text = (el.textContent || "").trim();
+          if (text) {
+            sections.push({ type: "code", content: text });
+          }
+          break;
+        }
+
         case "KBD": {
           const text = (el.textContent || "").trim();
           if (text) {

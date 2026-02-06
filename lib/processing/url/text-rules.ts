@@ -3,6 +3,63 @@
  * extraction. Consumed by text-extractor.ts and index.ts (cleanPopups).
  */
 
+// --- Language detection for code blocks ---
+
+/**
+ * Detect programming language from code content when class attribute is missing
+ */
+export function detectCodeLanguage(code: string): string | undefined {
+  const trimmed = code.trim();
+
+  // Shell/Bash commands
+  if (
+    /^(npm|npx|yarn|pnpm|bun|pip|cargo|go|docker|git|curl|wget|cd|ls|mkdir|rm|cp|mv|cat|echo|export|source)\s/.test(trimmed) ||
+    /^\$\s/.test(trimmed) ||
+    /^(sudo|apt|brew|dnf|yum)\s/.test(trimmed)
+  ) {
+    return 'bash';
+  }
+
+  // JavaScript/TypeScript patterns
+  if (
+    /^(import|export|const|let|var|function|class|interface|type|async|await)\s/.test(trimmed) ||
+    /console\.(log|error|warn|info)/.test(trimmed) ||
+    /^\s*(\/\/|\/\*)/.test(trimmed)
+  ) {
+    return trimmed.includes('interface') || trimmed.includes('type ') ? 'typescript' : 'javascript';
+  }
+
+  // Python
+  if (
+    /^(def|class|import|from|if|elif|else|for|while|try|except|with|return|print)\s/.test(trimmed) ||
+    /^#\s/.test(trimmed)
+  ) {
+    return 'python';
+  }
+
+  // SQL
+  if (/^(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|FROM|WHERE|JOIN)\s/i.test(trimmed)) {
+    return 'sql';
+  }
+
+  // JSON
+  if (/^\{[\s\S]*"[\w-]+"[\s\S]*:/.test(trimmed) || /^\[[\s\S]*\{/.test(trimmed)) {
+    return 'json';
+  }
+
+  // HTML/XML
+  if (/^<(!DOCTYPE|html|div|span|p|h[1-6]|a|img|svg)/i.test(trimmed)) {
+    return 'html';
+  }
+
+  // CSS
+  if (/^\s*[.#]?[\w-]+\s*\{/.test(trimmed) || /@(media|import|keyframes)/.test(trimmed)) {
+    return 'css';
+  }
+
+  return undefined;
+}
+
 // --- Popup / overlay cleanup (pre-Readability) ---
 
 const POPUP_SELECTORS_SAFE = [
@@ -214,6 +271,161 @@ export function isRelatedContentSection(el: Element): boolean {
       if (pattern.test(text)) return true;
     }
   }
+
+  return false;
+}
+
+// --- Specialized code block extraction ---
+
+/**
+ * Extract code from complex code block structures (e.g., code playgrounds,
+ * interactive code blocks with toolbars, copy buttons, etc.)
+ */
+export function extractCodeFromComplexBlock(el: Element): { code: string; language?: string } | null {
+  // Pattern 1: Look for pre.shiki inside nested divs
+  const shikiPre = el.querySelector('pre.shiki');
+  if (shikiPre) {
+    const code = shikiPre.querySelector('code');
+    if (code) {
+      // Extract language from attributes
+      const lang =
+        code.getAttribute('language') ||
+        shikiPre.getAttribute('language') ||
+        code.className.match(/language-(\w+)/)?.[1] ||
+        el.getAttribute('language') ||
+        undefined;
+
+      // Get text content, preserving line breaks
+      let text = '';
+      const lines = code.querySelectorAll('span.line, .line');
+      if (lines.length > 0) {
+        // Has line wrappers - process each line
+        lines.forEach((line, i) => {
+          text += line.textContent || '';
+          if (i < lines.length - 1) text += '\n';
+        });
+      } else {
+        // No line wrappers - get direct text
+        text = code.textContent || '';
+      }
+
+      return text.trim() ? { code: text, language: lang } : null;
+    }
+  }
+
+  // Pattern 2: Look for data attributes indicating code blocks
+  if (el.classList.contains('code-block') || el.getAttribute('data-component-part')?.includes('code')) {
+    const codeContainer = el.querySelector('[data-component-part="code-block-root"], .code-block-content, pre, code');
+    if (codeContainer) {
+      const lang =
+        el.getAttribute('language') ||
+        el.getAttribute('data-language') ||
+        codeContainer.getAttribute('language') ||
+        undefined;
+
+      const code = codeContainer.querySelector('code') || codeContainer;
+      let text = '';
+
+      // Check for line-based structure
+      const lines = code.querySelectorAll('span.line, .line, div.line');
+      if (lines.length > 0) {
+        lines.forEach((line, i) => {
+          text += line.textContent || '';
+          if (i < lines.length - 1) text += '\n';
+        });
+      } else {
+        text = code.textContent || '';
+      }
+
+      return text.trim() ? { code: text, language: lang } : null;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Check if an element is a special code block container that should be
+ * processed with extractCodeFromComplexBlock instead of normal PRE handling
+ */
+export function isComplexCodeBlock(el: Element): boolean {
+  // Has .code-block class
+  if (el.classList.contains('code-block')) return true;
+
+  // Has data-component-part with "code"
+  const part = el.getAttribute('data-component-part');
+  if (part && part.includes('code')) return true;
+
+  // Contains pre.shiki nested in divs (but not a direct pre.shiki)
+  if (el.tagName !== 'PRE' && el.querySelector('pre.shiki')) return true;
+
+  // Has language attribute (usually code playgrounds)
+  if (el.hasAttribute('language') && el.querySelector('pre, code')) return true;
+
+  return false;
+}
+
+// --- Callout/Admonition extraction ---
+
+export interface CalloutContent {
+  type: 'tip' | 'warning' | 'note' | 'important' | 'info';
+  content: string;
+}
+
+/**
+ * Extract content from callout/admonition blocks (tips, warnings, notes, etc.)
+ */
+export function extractCallout(el: Element): CalloutContent | null {
+  // Check for data-callout-type attribute
+  const calloutType = el.getAttribute('data-callout-type');
+  if (calloutType) {
+    const contentEl = el.querySelector('[data-component-part="callout-content"]') || el;
+    const text = (contentEl.textContent || '').trim();
+    if (text) {
+      return {
+        type: calloutType as CalloutContent['type'],
+        content: text,
+      };
+    }
+  }
+
+  // Check for common callout class patterns
+  const classList = el.className || '';
+  const calloutPatterns = [
+    { pattern: /\b(callout|admonition|alert|note-box).*tip\b/i, type: 'tip' as const },
+    { pattern: /\b(callout|admonition|alert|note-box).*warning\b/i, type: 'warning' as const },
+    { pattern: /\b(callout|admonition|alert|note-box).*note\b/i, type: 'note' as const },
+    { pattern: /\b(callout|admonition|alert|note-box).*important\b/i, type: 'important' as const },
+    { pattern: /\b(callout|admonition|alert|note-box).*info\b/i, type: 'info' as const },
+  ];
+
+  for (const { pattern, type } of calloutPatterns) {
+    if (pattern.test(classList)) {
+      // Try to find content container
+      const contentEl =
+        el.querySelector('.callout-content, .admonition-content, [data-component-part="callout-content"]') ||
+        el;
+
+      const text = (contentEl.textContent || '').trim();
+      if (text) {
+        return { type, content: text };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Check if an element is a callout/admonition block
+ */
+export function isCalloutBlock(el: Element): boolean {
+  // Has data-callout-type
+  if (el.hasAttribute('data-callout-type')) return true;
+
+  // Has callout/admonition classes
+  const classList = el.className || '';
+  if (/\b(callout|admonition|alert|note-box)\b/i.test(classList)) return true;
 
   return false;
 }

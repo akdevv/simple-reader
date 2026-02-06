@@ -1,6 +1,7 @@
 import { marked } from "marked";
 import type { ArticleSection, MediaItem, VideoMedia } from "@/lib/types/article";
 import type { ProcessingResult } from "@/lib/types/processing";
+import { detectCodeLanguage } from "./url/text-rules";
 
 const IMAGE_URL_REGEX =
   /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp|svg|avif)(?:\?\S*)?/gi;
@@ -130,13 +131,16 @@ function processMarkdown(content: string): {
         });
         break;
 
-      case "code":
+      case "code": {
+        // Auto-detect language if not specified in markdown
+        const lang = token.lang || detectCodeLanguage(token.text);
         sections.push({
           type: "code",
           content: token.text,
-          language: token.lang || undefined,
+          language: lang,
         });
         break;
+      }
 
       case "list":
         sections.push({
