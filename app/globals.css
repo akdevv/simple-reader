@@ -232,3 +232,38 @@
 .animation-delay-300 {
   animation-delay: 300ms;
 }
+
+/* ─── Article reading view ─────────────────────────────────────────────── */
+
+/* Code block scrollbar */
+.code-block pre::-webkit-scrollbar {
+  height: 6px;
+}
+.code-block pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+.code-block pre::-webkit-scrollbar-thumb {
+  background: oklch(1 0 0 / 0.1);
+  border-radius: 3px;
+}
+.code-block pre::-webkit-scrollbar-thumb:hover {
+  background: oklch(1 0 0 / 0.2);
+}
+
+/* Shiki output normalization */
+.code-highlight pre {
+  background: transparent !important;
+}
+.code-highlight code {
+  font-family: var(--font-mono);
+}
+
+/* Table horizontal scroll hint */
+.article-content table {
+  border-collapse: collapse;
+}
+
+/* Selection color in article */
+.article-body ::selection {
+  background: oklch(0.72 0.13 50 / 0.25);
+}

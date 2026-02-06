@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { processUrl } from "@/lib/processing/url-processor";
+import { processUrl } from "@/lib/processing/url";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(
