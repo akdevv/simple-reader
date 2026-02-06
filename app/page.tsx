@@ -11,29 +11,17 @@ import { Button } from "@/components/ui/button";
 function BookIcon({ className }: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 256 256"
       fill="none"
       className={className}
-      strokeWidth={1.5}
       stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={16}
     >
-      <path
-        d="M12 6.5C10.5 4.5 7.5 3 4 3v14c3.5 0 6.5 1.5 8 3.5C13.5 18.5 16.5 17 20 17V3c-3.5 0-6.5 1.5-8 3.5Z"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M12 6.5V20.5"
-        strokeLinecap="round"
-      />
-      {/* page lines left */}
-      <path d="M7 7.5h-1" strokeLinecap="round" opacity={0.5} />
-      <path d="M7 10h-1.5" strokeLinecap="round" opacity={0.5} />
-      <path d="M7.5 12.5h-2" strokeLinecap="round" opacity={0.5} />
-      {/* page lines right */}
-      <path d="M17 7.5h1" strokeLinecap="round" opacity={0.5} />
-      <path d="M17 10h1.5" strokeLinecap="round" opacity={0.5} />
-      <path d="M16.5 12.5h2" strokeLinecap="round" opacity={0.5} />
+      <path d="M108,144H40a8,8,0,0,1-8-8V72a8,8,0,0,1,8-8h60a8,8,0,0,1,8,8v88a40,40,0,0,1-40,40" />
+      <path d="M224,144H156a8,8,0,0,1-8-8V72a8,8,0,0,1,8-8h60a8,8,0,0,1,8,8v88a40,40,0,0,1-40,40" />
     </svg>
   );
 }
