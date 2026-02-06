@@ -1,33 +1,16 @@
+import { PiQuotes } from "react-icons/pi";
 import {
-  Headphones,
-  Sparkles,
-  ArrowRight,
-  Bookmark,
-  Eye,
-  Link2,
-  Play,
-  BookMarked,
-} from "lucide-react";
+  LuHeadphones,
+  LuSparkles,
+  LuArrowUpRight,
+  LuBookmark,
+  LuEye,
+  LuLink2,
+  LuPlay,
+  LuBookMarked,
+} from "react-icons/lu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-
-function BookIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 256 256"
-      fill="none"
-      className={className}
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={16}
-    >
-      <path d="M108,144H40a8,8,0,0,1-8-8V72a8,8,0,0,1,8-8h60a8,8,0,0,1,8,8v88a40,40,0,0,1-40,40" />
-      <path d="M224,144H156a8,8,0,0,1-8-8V72a8,8,0,0,1,8-8h60a8,8,0,0,1,8,8v88a40,40,0,0,1-40,40" />
-    </svg>
-  );
-}
 
 export default function Home() {
   return (
@@ -53,7 +36,7 @@ export default function Home() {
       {/* Nav */}
       <header className="relative z-10 mx-auto flex max-w-5xl items-center justify-between px-6 py-6 sm:px-10">
         <div className="flex items-center gap-2.5">
-          <BookIcon className="size-6 text-primary" />
+          <PiQuotes className="size-6 text-primary" />
           <span className="font-(family-name:--font-playfair) text-lg font-semibold italic tracking-tight text-foreground">
             simple reader
           </span>
@@ -99,7 +82,7 @@ export default function Home() {
             </div>
             {/* Audio bar */}
             <div className="mt-6 flex items-center gap-3 rounded-xl bg-muted/30 px-4 py-2.5">
-              <Play className="size-4 fill-primary/50 text-primary/50" />
+              <LuPlay className="size-4 fill-primary/50 text-primary/50" />
               <div className="h-2 flex-1 rounded-full bg-muted-foreground/10">
                 <div className="h-2 w-2/5 rounded-full bg-primary/35" />
               </div>
@@ -159,25 +142,19 @@ export default function Home() {
             </p>
 
             {/* URL input */}
-            <div className="animate-fade-in-up animation-delay-200 mt-10 flex flex-col gap-3 sm:flex-row">
-              <div className="group flex h-12 flex-1 items-center gap-3 rounded-xl border border-border bg-card/60 px-4 shadow-sm backdrop-blur-sm transition-all duration-300 focus-within:border-primary/40 focus-within:shadow-md focus-within:shadow-primary/5 sm:h-13">
-                <span className="select-none font-mono text-xs text-muted-foreground/50">
-                  https://
-                </span>
-                <Input
-                  type="url"
-                  placeholder="paste an article link…"
-                  className="h-full flex-1 border-0 bg-transparent px-0 text-base shadow-none outline-none ring-0 placeholder:text-muted-foreground/40 focus-visible:ring-0 sm:text-sm"
-                  aria-label="Article URL"
-                  disabled
-                />
-              </div>
+            <div className="animate-fade-in-up animation-delay-200 mt-10 flex flex-row items-center gap-3">
+              <Input
+                type="url"
+                placeholder="Paste an article link…"
+                className="h-13 flex-1 rounded-xl border border-border/80 bg-card/80 px-5 text-base shadow-md backdrop-blur-sm transition-all duration-300 placeholder:text-muted-foreground/40 focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/20"
+                aria-label="Article URL"
+              />
               <Button
-                size="lg"
-                className="h-12 gap-2 rounded-xl px-7 text-sm font-semibold shadow-md shadow-primary/10 transition-shadow hover:shadow-lg hover:shadow-primary/20 sm:h-13"
+                size="icon"
+                className="size-12 shrink-0 rounded-full shadow-md shadow-primary/15 transition-shadow hover:shadow-lg hover:shadow-primary/25"
+                aria-label="Read now"
               >
-                Read now
-                <ArrowRight className="size-4" />
+                <LuArrowUpRight className="size-5" />
               </Button>
             </div>
             <p className="animate-fade-in animation-delay-300 mt-3.5 text-xs text-muted-foreground/60">
@@ -199,19 +176,19 @@ export default function Home() {
           </div>
           <div className="grid gap-5 sm:grid-cols-3">
             <FeatureCard
-              icon={<Eye className="size-5" />}
+              icon={<LuEye className="size-5" />}
               title="Clean reading"
               description="Strips away ads, popups, and visual noise. Just the article in a beautiful, comfortable layout."
               accent="primary"
             />
             <FeatureCard
-              icon={<Headphones className="size-5" />}
+              icon={<LuHeadphones className="size-5" />}
               title="Synced audio"
               description="Listen while you read. Words highlight in sync so you never lose your place."
               accent="secondary"
             />
             <FeatureCard
-              icon={<Bookmark className="size-5" />}
+              icon={<LuBookmark className="size-5" />}
               title="Save & resume"
               description="Bookmark articles for later. Pick up exactly where you left off, every time."
               accent="primary"
@@ -228,7 +205,7 @@ export default function Home() {
           <div className="relative mx-auto max-w-5xl px-6 py-28 sm:px-10 sm:py-36">
             <div className="flex flex-col items-center text-center">
               <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/50 px-4 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur-sm">
-                <Sparkles className="size-3 text-primary" />
+                <LuSparkles className="size-3 text-primary" />
                 Simple by design
               </span>
               <h2 className="mt-5 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
@@ -240,19 +217,19 @@ export default function Home() {
                 number="01"
                 title="Paste a link"
                 description="Drop in any article URL — blogs, news, newsletters, essays."
-                icon={<Link2 className="size-4" />}
+                icon={<LuLink2 className="size-4" />}
               />
               <StepCard
                 number="02"
                 title="Read or listen"
                 description="We extract the content and present it beautifully. Hit play to listen along."
-                icon={<Play className="size-4" />}
+                icon={<LuPlay className="size-4" />}
               />
               <StepCard
                 number="03"
                 title="Save for later"
                 description="Bookmark articles and pick up right where you left off."
-                icon={<BookMarked className="size-4" />}
+                icon={<LuBookMarked className="size-4" />}
               />
             </div>
           </div>
@@ -263,7 +240,7 @@ export default function Home() {
       <footer className="relative z-10 border-t border-border/40">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-6 sm:px-10">
           <div className="flex items-center gap-2">
-            <BookIcon className="size-4 text-muted-foreground/60" />
+            <PiQuotes className="size-4 text-muted-foreground/60" />
             <span className="font-(family-name:--font-playfair) text-sm italic text-muted-foreground/60">
               simple reader
             </span>
