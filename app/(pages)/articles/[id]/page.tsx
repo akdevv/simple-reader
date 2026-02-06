@@ -2,10 +2,18 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Article } from "@/lib/types/article";
+import { Article, ArticleSection, VideoSection } from "@/lib/types/article";
 import { CgSpinnerAlt } from "react-icons/cg";
-import { LuExternalLink, LuTriangleAlert, LuArrowLeft } from "react-icons/lu";
+import {
+  LuExternalLink,
+  LuTriangleAlert,
+  LuArrowLeft,
+  LuFileText,
+  LuImageOff,
+  LuRotateCw,
+} from "react-icons/lu";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import axios from "axios";
 
 export default function ArticlePage() {
@@ -32,7 +40,6 @@ export default function ArticlePage() {
     }
   }, [id]);
 
-  // Trigger processing, returns false if it failed (record deleted)
   const triggerProcess = useCallback(async () => {
     try {
       await axios.post(`/api/article/${id}/process`);
@@ -49,7 +56,21 @@ export default function ArticlePage() {
     }
   }, [id]);
 
-  // Initial load: fetch article, then trigger processing if PENDING
+  const retryProcess = useCallback(async () => {
+    setError("");
+    setLoading(true);
+    // Reset status so processing can be re-triggered
+    try {
+      await axios.patch(`/api/article/${id}`, {});
+    } catch {
+      // ignore - we'll try processing anyway
+    }
+    const ok = await triggerProcess();
+    if (ok) {
+      await fetchArticle();
+    }
+  }, [id, triggerProcess, fetchArticle]);
+
   useEffect(() => {
     (async () => {
       await fetchArticle();
@@ -68,7 +89,9 @@ export default function ArticlePage() {
       await fetchArticle();
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [article?.status, triggerProcess, fetchArticle]);
 
   // Poll while PROCESSING
@@ -79,16 +102,17 @@ export default function ArticlePage() {
     return () => clearInterval(interval);
   }, [article?.status, fetchArticle]);
 
-  const goHome = () => router.push("/");
+  const goBack = () => router.push("/articles");
 
+  // Loading skeleton
   if (loading) {
-    return <StatusShell><LoadingState message="Loading article..." /></StatusShell>;
+    return <ArticleSkeleton />;
   }
 
-  if (error) {
+  if (error && !article) {
     return (
       <StatusShell>
-        <ErrorState message={error} onBack={goHome} />
+        <ErrorState message={error} onBack={goBack} />
       </StatusShell>
     );
   }
@@ -96,7 +120,33 @@ export default function ArticlePage() {
   if (!article) {
     return (
       <StatusShell>
-        <ErrorState message="Article not found" onBack={goHome} />
+        <ErrorState message="Article not found" onBack={goBack} />
+      </StatusShell>
+    );
+  }
+
+  // Article in ERROR state
+  if (article.status === "ERROR") {
+    return (
+      <StatusShell>
+        <div className="flex flex-col items-center gap-4 text-center max-w-md">
+          <LuTriangleAlert className="size-10 text-destructive" />
+          <p className="text-lg text-foreground">
+            {article.errorMessage || "Failed to process article"}
+          </p>
+          <div className="flex gap-3">
+            <Button onClick={goBack} variant="outline" className="gap-2">
+              <LuArrowLeft className="size-4" />
+              Go back
+            </Button>
+            {article.sourceType === "url" && (
+              <Button onClick={retryProcess} className="gap-2">
+                <LuRotateCw className="size-4" />
+                Try again
+              </Button>
+            )}
+          </div>
+        </div>
       </StatusShell>
     );
   }
@@ -104,7 +154,7 @@ export default function ArticlePage() {
   if (article.status === "PENDING" || article.status === "PROCESSING") {
     return (
       <StatusShell>
-        <LoadingState
+        <ProcessingState
           message={
             article.status === "PENDING"
               ? "Waiting to process article..."
@@ -116,17 +166,26 @@ export default function ArticlePage() {
   }
 
   // READY — render article content
-  const sections = (article.sections as { type: string; content: string }[] | null) ?? [];
+  const sections = (article.sections as ArticleSection[] | null) ?? [];
 
   return (
     <div className="min-h-screen bg-background">
-      <article className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
-        <header className="mb-8 space-y-4">
-          <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+      <article className="mx-auto max-w-[680px] px-4 py-12 sm:px-6">
+        {/* Back button */}
+        <button
+          onClick={goBack}
+          className="mb-8 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <LuArrowLeft className="size-3.5" />
+          Back to articles
+        </button>
+
+        <header className="mb-10 space-y-4">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl leading-tight">
             {article.title || "Untitled"}
           </h1>
 
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <time dateTime={new Date(article.createdAt).toISOString()}>
               {new Date(article.createdAt).toLocaleDateString("en-US", {
                 year: "numeric",
@@ -134,46 +193,231 @@ export default function ArticlePage() {
                 day: "numeric",
               })}
             </time>
-            <span>&middot;</span>
-            <a
-              href={article.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 hover:text-primary transition-colors underline underline-offset-4"
-            >
-              View original
-              <LuExternalLink className="size-3.5" />
-            </a>
+
+            {article.siteName && (
+              <>
+                <span className="text-border">|</span>
+                <span>{article.siteName}</span>
+              </>
+            )}
+
+            {article.sourceType === "url" && article.url ? (
+              <>
+                <span className="text-border">|</span>
+                <a
+                  href={article.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 transition-colors hover:text-primary"
+                >
+                  View original
+                  <LuExternalLink className="size-3" />
+                </a>
+              </>
+            ) : article.sourceType === "pasted" ? (
+              <>
+                <span className="text-border">|</span>
+                <span className="inline-flex items-center gap-1">
+                  <LuFileText className="size-3" />
+                  Pasted content
+                </span>
+              </>
+            ) : null}
           </div>
         </header>
 
-        <div className="prose prose-neutral dark:prose-invert max-w-none">
+        <div className="space-y-1">
           {sections.length > 0 ? (
-            sections.map((section, i) => {
-              if (section.type === "heading") {
-                return (
-                  <h2
-                    key={i}
-                    className="mt-8 mb-4 text-2xl font-semibold text-foreground"
-                  >
-                    {section.content}
-                  </h2>
-                );
-              }
-              return (
-                <p
-                  key={i}
-                  className="mb-4 text-lg leading-relaxed text-foreground/90"
-                >
-                  {section.content}
-                </p>
-              );
-            })
+            sections.map((section, i) => renderSection(section, i))
           ) : (
             <p className="text-muted-foreground">No content available.</p>
           )}
         </div>
       </article>
+    </div>
+  );
+}
+
+function renderSection(section: ArticleSection, index: number) {
+  switch (section.type) {
+    case "heading": {
+      const level = section.level || 2;
+      const Tag = `h${level}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+      const sizeClasses: Record<number, string> = {
+        1: "text-3xl font-bold",
+        2: "text-2xl font-semibold",
+        3: "text-xl font-semibold",
+        4: "text-lg font-semibold",
+        5: "text-base font-semibold",
+        6: "text-sm font-semibold uppercase tracking-wide",
+      };
+      return (
+        <Tag
+          key={index}
+          className={`mt-10 mb-4 ${sizeClasses[level]} text-foreground`}
+        >
+          {section.content}
+        </Tag>
+      );
+    }
+
+    case "paragraph":
+      return (
+        <p
+          key={index}
+          className="mb-5 text-[18px] leading-[1.75] text-foreground/90"
+        >
+          {section.content}
+        </p>
+      );
+
+    case "image":
+      return <ArticleImage key={index} section={section} />;
+
+    case "video":
+      return <ArticleVideo key={index} section={section} />;
+
+    case "blockquote":
+      return (
+        <blockquote
+          key={index}
+          className="my-6 border-l-3 border-primary/30 pl-5 italic text-foreground/80 text-[17px] leading-[1.7]"
+        >
+          {section.content}
+        </blockquote>
+      );
+
+    case "code":
+      return (
+        <pre
+          key={index}
+          className="my-6 overflow-x-auto rounded-lg bg-muted/40 p-4 font-mono text-sm leading-relaxed"
+        >
+          <code>{section.content}</code>
+        </pre>
+      );
+
+    case "list": {
+      const ListTag = section.ordered ? "ol" : "ul";
+      return (
+        <ListTag
+          key={index}
+          className={`my-5 ml-6 space-y-2 text-[17px] leading-[1.7] text-foreground/90 ${
+            section.ordered ? "list-decimal" : "list-disc"
+          }`}
+        >
+          {section.items.map((item, j) => (
+            <li key={j}>{item}</li>
+          ))}
+        </ListTag>
+      );
+    }
+
+    default:
+      return null;
+  }
+}
+
+function ArticleImage({
+  section,
+}: {
+  section: { url: string; alt?: string; caption?: string };
+}) {
+  const [errored, setErrored] = useState(false);
+
+  if (errored) {
+    return (
+      <div className="my-6 flex items-center justify-center rounded-xl border border-border/50 bg-muted/20 py-12">
+        <div className="flex flex-col items-center gap-2 text-muted-foreground/50">
+          <LuImageOff className="size-8" />
+          <span className="text-sm">Image unavailable</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <figure className="my-6">
+      <img
+        src={section.url}
+        alt={section.alt || ""}
+        loading="lazy"
+        className="w-full rounded-xl"
+        onError={() => setErrored(true)}
+      />
+      {section.caption && (
+        <figcaption className="mt-2 text-center text-sm text-muted-foreground">
+          {section.caption}
+        </figcaption>
+      )}
+    </figure>
+  );
+}
+
+function ArticleVideo({ section }: { section: VideoSection }) {
+  if (section.provider === "youtube" || section.provider === "vimeo") {
+    return (
+      <div className="my-6 aspect-video overflow-hidden rounded-xl">
+        <iframe
+          src={section.url}
+          className="h-full w-full"
+          allowFullScreen
+          loading="lazy"
+          title="Embedded video"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <video
+      src={section.url}
+      controls
+      className="my-6 w-full rounded-xl"
+      preload="metadata"
+    />
+  );
+}
+
+function ArticleSkeleton() {
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto max-w-[680px] px-4 py-12 sm:px-6">
+        {/* Back button skeleton */}
+        <Skeleton className="mb-8 h-4 w-32" />
+
+        {/* Title skeleton */}
+        <div className="mb-10 space-y-4">
+          <div className="space-y-3">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-9 w-3/4" />
+          </div>
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+        </div>
+
+        {/* Content skeleton */}
+        <div className="space-y-5">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="space-y-2.5">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-5/6" />
+            </div>
+          ))}
+          <Skeleton className="h-6 w-2/5 mt-8" />
+          {[...Array(4)].map((_, i) => (
+            <div key={`b${i}`} className="space-y-2.5">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-4/5" />
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -186,7 +430,7 @@ function StatusShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function LoadingState({ message }: { message: string }) {
+function ProcessingState({ message }: { message: string }) {
   return (
     <div className="flex flex-col items-center gap-4 text-center">
       <CgSpinnerAlt className="size-8 animate-spin text-primary" />

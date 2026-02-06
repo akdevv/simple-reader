@@ -1,29 +1,10 @@
 import { prisma } from "@/lib/prisma";
+import { processUrl } from "@/lib/processing/url-processor";
 import { NextRequest, NextResponse } from "next/server";
-
-/** Toggle mock behavior: "success" populates article with mock data; "fail" sets ERROR + message. */
-const MOCK_CASE: "success" | "fail" = "fail";
-
-const MOCK_ARTICLE = {
-  title: "The Future of Reading: How AI Is Reshaping Long-Form Content",
-  excerpt:
-    "A deep dive into how machine learning and natural language processing are changing the way we consume and interact with articles, essays, and books.",
-  siteName: "Tech Insights Blog",
-  sections: [
-    { type: "paragraph", content: "In the past decade, the way we read has transformed dramatically. From e-readers to audiobooks to AI-powered summarization, technology continues to reshape our relationship with long-form content." },
-    { type: "heading", content: "The Rise of Smart Summaries" },
-    { type: "paragraph", content: "Tools that can distill a 5,000-word article into a few bullet points are no longer science fiction. Readers can now choose how deep they want to go—from a quick skim to a full immersion." },
-    { type: "heading", content: "What Stays the Same" },
-    { type: "paragraph", content: "Despite these changes, the core desire remains: people still want to understand, learn, and feel connected to ideas. The best technology serves that desire without replacing the joy of getting lost in a good piece of writing." },
-  ] as { type: string; content: string }[],
-  media: [
-    { url: "https://example.com/og-image.jpg", alt: "Article hero image" },
-  ] as { url: string; alt?: string }[],
-};
 
 export async function POST(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
 
@@ -38,34 +19,88 @@ export async function POST(
     );
   }
 
+  // Pasted articles are already READY
+  if (article.sourceType === "pasted") {
+    return NextResponse.json({ data: article }, { status: 200 });
+  }
+
   // Idempotent: don't reprocess if already processing or ready
   if (article.status === "PROCESSING" || article.status === "READY") {
     return NextResponse.json({ data: article }, { status: 200 });
   }
 
-  // Simulate processing time
-  await new Promise((resolve) => setTimeout(resolve, 5000));
-
-  if (MOCK_CASE === "fail") {
-    await prisma.article.delete({ where: { id } });
+  if (!article.url) {
     return NextResponse.json(
-      { message: "Could not fetch or parse the article. Please try again with a different URL." },
-      { status: 422 }
+      { message: "Article has no URL to process" },
+      { status: 400 }
     );
   }
 
-  // Success: populate with mock data and set READY
-  const updated = await prisma.article.update({
+  // Set status to PROCESSING
+  console.log(`[process-route] Processing article ${id}, url: ${article.url}`);
+  await prisma.article.update({
     where: { id },
-    data: {
-      status: "READY",
-      title: MOCK_ARTICLE.title,
-      excerpt: MOCK_ARTICLE.excerpt,
-      siteName: MOCK_ARTICLE.siteName,
-      sections: MOCK_ARTICLE.sections as object,
-      media: MOCK_ARTICLE.media as object,
-    },
+    data: { status: "PROCESSING" },
   });
 
-  return NextResponse.json({ data: updated }, { status: 200 });
+  try {
+    const result = await processUrl(article.url);
+
+    console.log(`[process-route] Result — isPaywalled: ${result.isPaywalled}, sections: ${result.sections.length}, errorMessage: ${result.errorMessage || "none"}`);
+
+    if (result.isPaywalled || result.sections.length === 0) {
+      console.log(`[process-route] Marking article ${id} as ERROR`);
+      const updated = await prisma.article.update({
+        where: { id },
+        data: {
+          status: "ERROR",
+          errorMessage:
+            result.errorMessage ||
+            "Could not extract article content. The page may be paywalled or not an article.",
+          title: result.title || null,
+          siteName: result.siteName || null,
+        },
+      });
+
+      return NextResponse.json(
+        { data: updated, message: updated.errorMessage },
+        { status: 422 }
+      );
+    }
+
+    const updated = await prisma.article.update({
+      where: { id },
+      data: {
+        status: "READY",
+        title: result.title,
+        excerpt: result.excerpt,
+        siteName: result.siteName,
+        sections: result.sections as object[],
+        media: result.media as object[],
+        errorMessage: null,
+      },
+    });
+
+    console.log(`[process-route] Article ${id} processed successfully — "${result.title}"`);
+    return NextResponse.json({ data: updated }, { status: 200 });
+  } catch (err) {
+    console.error(`[process-route] Error processing article ${id}:`, err);
+    const errorMessage =
+      err instanceof Error
+        ? err.message
+        : "Could not fetch or parse the article. Please try a different URL.";
+
+    const updated = await prisma.article.update({
+      where: { id },
+      data: {
+        status: "ERROR",
+        errorMessage,
+      },
+    });
+
+    return NextResponse.json(
+      { data: updated, message: errorMessage },
+      { status: 422 }
+    );
+  }
 }

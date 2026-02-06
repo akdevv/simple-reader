@@ -16,9 +16,14 @@ datasource db {
 model Article {
   id           String   @id @default(uuid())
   userId       String
-  url          String
+  url          String?
+  sourceType   String   @default("url")
 
   status       ArticleStatus @default(PENDING)
+  errorMessage String?
+
+  isFavourite  Boolean  @default(false)
+  readStatus   String   @default("UNREAD")
 
   title        String?
   excerpt      String?
@@ -33,6 +38,8 @@ model Article {
 
   @@index([userId])
   @@index([status])
+  @@index([readStatus])
+  @@index([isFavourite])
 }
 
 enum ArticleStatus {
