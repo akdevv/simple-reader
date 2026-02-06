@@ -290,3 +290,41 @@
 .article-body ::selection {
   background: oklch(0.72 0.13 50 / 0.25);
 }
+
+/* ─── Audio sentence highlighting ─────────────────────────────────────── */
+
+.sentence {
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+  border-radius: 2px;
+  padding: 1px 0;
+  cursor: pointer;
+}
+
+.sentence:hover {
+  background-color: oklch(0.72 0.13 50 / 0.06);
+}
+
+.sentence-active {
+  background-color: oklch(0.72 0.13 50 / 0.12);
+  box-shadow: -4px 0 0 oklch(0.72 0.13 50 / 0.12),
+    4px 0 0 oklch(0.72 0.13 50 / 0.12);
+  border-radius: 2px;
+  padding: 1px 0;
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Audio bar slide-up animation */
+.audio-bar-enter {
+  animation: audio-slide-up 0.3s ease-out both;
+}
+
+@keyframes audio-slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

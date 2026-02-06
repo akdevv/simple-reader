@@ -1,14 +1,22 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Article,
   ArticleSection,
+  ListSection,
   VideoSection,
   TableSection,
   CodeSection,
 } from "@/lib/types/article";
+import { Sentence, AudioAlignment } from "@/lib/types/audio";
+import { splitSentences } from "@/lib/utils/split-sentences";
+import { generateMockAlignment } from "@/lib/utils/mock-alignment";
+import { useAudioPlayback } from "@/hooks/useAudioPlayback";
+import { useAutoScroll } from "@/hooks/useAutoScroll";
+import { AudioControlBar } from "@/components/audio/AudioControlBar";
+import { SentenceText } from "@/components/audio/SentenceText";
 import { codeToHtml } from "shiki/bundle/web";
 import { CgSpinnerAlt } from "react-icons/cg";
 import {
@@ -20,6 +28,7 @@ import {
   LuRotateCw,
   LuCheck,
   LuCopy,
+  LuHeadphones,
 } from "react-icons/lu";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -168,7 +177,75 @@ export default function ArticlePage() {
   const sections = (article.sections as ArticleSection[] | null) ?? [];
 
   return (
-    <div className="min-h-screen bg-background">
+    <ArticleContent
+      article={article}
+      sections={sections}
+      goBack={goBack}
+    />
+  );
+}
+
+// ─── Article Content (with audio) ───────────────────────────────────────────
+
+function ArticleContent({
+  article,
+  sections,
+  goBack,
+}: {
+  article: Article;
+  sections: ArticleSection[];
+  goBack: () => void;
+}) {
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  const [audioAlignment, setAudioAlignment] = useState<AudioAlignment | null>(
+    null,
+  );
+
+  // Compute sentences from sections
+  const sentences = useMemo(
+    () => splitSentences(sections),
+    [sections],
+  );
+
+  // Build mock alignment when audio is enabled
+  useEffect(() => {
+    if (audioEnabled && sentences.length > 0) {
+      const alignment = generateMockAlignment(sentences, "/audio/test.mp3");
+      setAudioAlignment(alignment);
+    } else {
+      setAudioAlignment(null);
+    }
+  }, [audioEnabled, sentences]);
+
+  const playback = useAudioPlayback(audioAlignment);
+
+  // Active sentence tracking
+  const activeSentenceId = audioAlignment
+    ? (audioAlignment.sentences[playback.currentSentenceIndex]?.id ?? null)
+    : null;
+
+  useAutoScroll(activeSentenceId, playback.isPlaying);
+
+  const handleSentenceClick = useCallback(
+    (sentenceId: string) => {
+      if (!audioAlignment) return;
+      const idx = audioAlignment.sentences.findIndex(
+        (s) => s.id === sentenceId,
+      );
+      if (idx !== -1) {
+        playback.playFromSentence(idx);
+      }
+    },
+    [audioAlignment, playback],
+  );
+
+  const handleCloseAudio = useCallback(() => {
+    playback.stop();
+    setAudioEnabled(false);
+  }, [playback]);
+
+  return (
+    <div className={`min-h-screen bg-background ${audioEnabled ? "pb-20" : ""}`}>
       <article className="article-content mx-auto max-w-[720px] px-5 py-14 sm:px-8">
         {/* Back nav */}
         <button
@@ -226,14 +303,33 @@ export default function ArticlePage() {
           </div>
 
           {/* Divider line */}
-          <div className="mt-8 h-px bg-gradient-to-r from-border/80 via-border/40 to-transparent" />
+          <div className="mt-8 flex items-center gap-4">
+            <div className="flex-1 h-px bg-gradient-to-r from-border/80 via-border/40 to-transparent" />
+            {!audioEnabled && sentences.length > 0 && (
+              <button
+                onClick={() => setAudioEnabled(true)}
+                className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              >
+                <LuHeadphones className="size-3.5" />
+                Listen
+              </button>
+            )}
+          </div>
         </header>
 
         {/* Content */}
         <div className="article-body">
           {sections.length > 0 ? (
             sections.map((section, i) => (
-              <SectionRenderer key={i} section={section} />
+              <SectionRenderer
+                key={i}
+                section={section}
+                sectionIndex={i}
+                sentences={sentences}
+                activeSentenceId={activeSentenceId}
+                onSentenceClick={handleSentenceClick}
+                audioEnabled={audioEnabled}
+              />
             ))
           ) : (
             <p className="text-muted-foreground">No content available.</p>
@@ -251,13 +347,45 @@ export default function ArticlePage() {
           </button>
         </div>
       </article>
+
+      {/* Audio control bar */}
+      {audioEnabled && audioAlignment && (
+        <AudioControlBar
+          isPlaying={playback.isPlaying}
+          currentSentenceIndex={playback.currentSentenceIndex}
+          totalSentences={playback.totalSentences}
+          onToggle={playback.toggle}
+          onNext={playback.next}
+          onPrev={playback.prev}
+          onClose={handleCloseAudio}
+        />
+      )}
     </div>
   );
 }
 
 // ─── Section Renderer ───────────────────────────────────────────────────────
 
-function SectionRenderer({ section }: { section: ArticleSection }) {
+function SectionRenderer({
+  section,
+  sectionIndex,
+  sentences,
+  activeSentenceId,
+  onSentenceClick,
+  audioEnabled,
+}: {
+  section: ArticleSection;
+  sectionIndex: number;
+  sentences: Sentence[];
+  activeSentenceId: string | null;
+  onSentenceClick?: (sentenceId: string) => void;
+  audioEnabled: boolean;
+}) {
+  // Get sentences for this section
+  const sectionSentences = audioEnabled
+    ? sentences.filter((s) => s.sectionIndex === sectionIndex)
+    : [];
+
   switch (section.type) {
     case "heading": {
       const level = section.level || 2;
@@ -272,7 +400,16 @@ function SectionRenderer({ section }: { section: ArticleSection }) {
       };
       return (
         <Tag className={`${styles[level]} text-foreground`}>
-          {section.content}
+          {audioEnabled && sectionSentences.length > 0 ? (
+            <SentenceText
+              text={section.content}
+              sentences={sectionSentences}
+              activeSentenceId={activeSentenceId}
+              onSentenceClick={onSentenceClick}
+            />
+          ) : (
+            section.content
+          )}
         </Tag>
       );
     }
@@ -280,7 +417,16 @@ function SectionRenderer({ section }: { section: ArticleSection }) {
     case "paragraph":
       return (
         <p className="mb-6 text-[17px] leading-[1.8] text-foreground/85">
-          <RichText text={section.content} />
+          {audioEnabled && sectionSentences.length > 0 ? (
+            <SentenceText
+              text={section.content}
+              sentences={sectionSentences}
+              activeSentenceId={activeSentenceId}
+              onSentenceClick={onSentenceClick}
+            />
+          ) : (
+            <RichText text={section.content} />
+          )}
         </p>
       );
 
@@ -294,7 +440,16 @@ function SectionRenderer({ section }: { section: ArticleSection }) {
       return (
         <blockquote className="my-8 relative pl-6 before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:rounded-full before:bg-primary/40">
           <p className="text-[17px] leading-[1.75] text-foreground/70 italic">
-            <RichText text={section.content} />
+            {audioEnabled && sectionSentences.length > 0 ? (
+              <SentenceText
+                text={section.content}
+                sentences={sectionSentences}
+                activeSentenceId={activeSentenceId}
+                onSentenceClick={onSentenceClick}
+              />
+            ) : (
+              <RichText text={section.content} />
+            )}
           </p>
         </blockquote>
       );
@@ -302,24 +457,16 @@ function SectionRenderer({ section }: { section: ArticleSection }) {
     case "code":
       return <CodeBlock section={section} />;
 
-    case "list": {
-      const ListTag = section.ordered ? "ol" : "ul";
+    case "list":
       return (
-        <ListTag
-          className={`my-6 space-y-2.5 text-[17px] leading-[1.75] text-foreground/85 ${
-            section.ordered
-              ? "list-decimal pl-6 marker:text-muted-foreground/50 marker:font-mono marker:text-sm"
-              : "pl-6 list-disc marker:text-primary/40"
-          }`}
-        >
-          {section.items.map((item, j) => (
-            <li key={j} className="pl-1">
-              <RichText text={item} />
-            </li>
-          ))}
-        </ListTag>
+        <ListRenderer
+          section={section}
+          sectionSentences={sectionSentences}
+          activeSentenceId={activeSentenceId}
+          onSentenceClick={onSentenceClick}
+          audioEnabled={audioEnabled}
+        />
       );
-    }
 
     case "table":
       return <ArticleTable section={section} />;
@@ -327,6 +474,53 @@ function SectionRenderer({ section }: { section: ArticleSection }) {
     default:
       return null;
   }
+}
+
+// ─── List Renderer (handles per-item sentence mapping) ──────────────────────
+
+function ListRenderer({
+  section,
+  sectionSentences,
+  activeSentenceId,
+  onSentenceClick,
+  audioEnabled,
+}: {
+  section: ListSection;
+  sectionSentences: Sentence[];
+  activeSentenceId: string | null;
+  onSentenceClick?: (sentenceId: string) => void;
+  audioEnabled: boolean;
+}) {
+  const ListTag = section.ordered ? "ol" : "ul";
+  return (
+    <ListTag
+      className={`my-6 space-y-2.5 text-[17px] leading-[1.75] text-foreground/85 ${
+        section.ordered
+          ? "list-decimal pl-6 marker:text-muted-foreground/50 marker:font-mono marker:text-sm"
+          : "pl-6 list-disc marker:text-primary/40"
+      }`}
+    >
+      {section.items.map((item, j) => {
+        const itemSentences = audioEnabled
+          ? sectionSentences.filter((s) => s.itemIndex === j)
+          : [];
+        return (
+          <li key={j} className="pl-1">
+            {audioEnabled && itemSentences.length > 0 ? (
+              <SentenceText
+                text={item}
+                sentences={itemSentences}
+                activeSentenceId={activeSentenceId}
+                onSentenceClick={onSentenceClick}
+              />
+            ) : (
+              <RichText text={item} />
+            )}
+          </li>
+        );
+      })}
+    </ListTag>
+  );
 }
 
 // ─── Code Block with Syntax Highlighting ────────────────────────────────────
