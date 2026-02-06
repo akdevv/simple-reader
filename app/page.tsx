@@ -1,16 +1,17 @@
-import { PiQuotes } from "react-icons/pi";
 import {
   LuHeadphones,
   LuSparkles,
-  LuArrowUpRight,
   LuBookmark,
   LuEye,
   LuLink2,
   LuPlay,
   LuBookMarked,
 } from "react-icons/lu";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Navbar } from "@/components/shared/navbar";
+import { Footer } from "@/components/shared/footer";
+import { HeroSection } from "@/components/home/hero-section";
+import { FeatureCard } from "@/components/home/feature-card";
+import { StepCard } from "@/components/home/steps-card";
 
 export default function Home() {
   return (
@@ -33,135 +34,10 @@ export default function Home() {
         }}
       />
 
-      {/* Nav */}
-      <header className="relative z-10 mx-auto flex max-w-5xl items-center justify-between px-6 py-6 sm:px-10">
-        <div className="flex items-center gap-2.5">
-          <PiQuotes className="size-6 text-primary" />
-          <span className="font-(family-name:--font-playfair) text-lg font-semibold italic tracking-tight text-foreground">
-            simple reader
-          </span>
-        </div>
-        <nav className="hidden items-center gap-8 text-sm font-medium text-muted-foreground sm:flex">
-          <a
-            href="#features"
-            className="transition-colors hover:text-foreground"
-          >
-            Features
-          </a>
-          <a href="#how" className="transition-colors hover:text-foreground">
-            How it works
-          </a>
-        </nav>
-      </header>
+      <Navbar />
 
-      {/* Hero */}
       <main className="relative z-10">
-        {/* Floating preview card — desktop (outside max-w container) */}
-        <div className="animate-fade-in-up animation-delay-300 pointer-events-none absolute top-32 right-[max(2rem,calc(50%-45rem))] z-0 hidden w-96 xl:block">
-          <div className="rotate-2 rounded-2xl border border-border/50 bg-card/50 p-8 shadow-2xl shadow-black/20 backdrop-blur-lg">
-            {/* Title skeleton */}
-            <div className="mb-1.5 h-3 w-24 rounded-full bg-primary/25" />
-            <div className="mb-5 h-2.5 w-16 rounded-full bg-primary/15" />
-            {/* Body lines */}
-            <div className="space-y-3">
-              <div className="h-2.5 w-full rounded-full bg-muted-foreground/12" />
-              <div className="h-2.5 w-[90%] rounded-full bg-muted-foreground/12" />
-              <div className="h-2.5 w-4/5 rounded-full bg-muted-foreground/12" />
-              <div className="h-2.5 w-full rounded-full bg-muted-foreground/12" />
-              <div className="flex items-center gap-1.5">
-                <div className="h-2.5 w-3/4 rounded-full bg-primary/20" />
-                <div className="size-1.5 rounded-full bg-primary/40 animate-pulse" />
-              </div>
-              <div className="h-2.5 w-[85%] rounded-full bg-muted-foreground/12" />
-              <div className="h-2.5 w-2/3 rounded-full bg-muted-foreground/12" />
-              <div className="h-2.5 w-[95%] rounded-full bg-muted-foreground/12" />
-              <div className="h-2.5 w-3/5 rounded-full bg-muted-foreground/12" />
-              <div className="h-2.5 w-4/5 rounded-full bg-muted-foreground/12" />
-              <div className="h-2.5 w-full rounded-full bg-muted-foreground/12" />
-              <div className="h-2.5 w-2/3 rounded-full bg-muted-foreground/12" />
-            </div>
-            {/* Audio bar */}
-            <div className="mt-6 flex items-center gap-3 rounded-xl bg-muted/30 px-4 py-2.5">
-              <LuPlay className="size-4 fill-primary/50 text-primary/50" />
-              <div className="h-2 flex-1 rounded-full bg-muted-foreground/10">
-                <div className="h-2 w-2/5 rounded-full bg-primary/35" />
-              </div>
-              <span className="font-mono text-[11px] text-muted-foreground/40">
-                2:34
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <section className="relative mx-auto max-w-5xl px-6 pt-20 pb-28 sm:px-10 sm:pt-32 sm:pb-40">
-          {/* Mobile preview card — sits behind hero text */}
-          <div
-            className="pointer-events-none absolute top-6 -right-2 z-0 w-56 opacity-[0.08] sm:hidden"
-            aria-hidden="true"
-          >
-            <div className="rotate-6 rounded-2xl border border-foreground/20 p-4">
-              <div className="mb-3 h-2 w-12 rounded-full bg-foreground/30" />
-              <div className="space-y-2">
-                <div className="h-1.5 w-full rounded-full bg-foreground/20" />
-                <div className="h-1.5 w-5/6 rounded-full bg-foreground/20" />
-                <div className="h-1.5 w-4/5 rounded-full bg-foreground/20" />
-                <div className="h-1.5 w-full rounded-full bg-foreground/20" />
-                <div className="h-1.5 w-3/4 rounded-full bg-foreground/25" />
-                <div className="h-1.5 w-5/6 rounded-full bg-foreground/20" />
-                <div className="h-1.5 w-2/3 rounded-full bg-foreground/20" />
-                <div className="h-1.5 w-full rounded-full bg-foreground/20" />
-                <div className="h-1.5 w-4/6 rounded-full bg-foreground/20" />
-              </div>
-              <div className="mt-3 flex items-center gap-1.5">
-                <div className="size-2.5 rounded-full bg-foreground/20" />
-                <div className="h-1 flex-1 rounded-full bg-foreground/15">
-                  <div className="h-1 w-2/5 rounded-full bg-foreground/25" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="relative z-10 max-w-2xl">
-            <div className="animate-fade-in flex items-center gap-2 text-sm font-semibold tracking-widest text-primary/80 uppercase">
-              <span className="inline-block h-px w-6 bg-primary/40" />
-              Read &middot; Listen &middot; Focus
-            </div>
-            <h1 className="animate-fade-in-up mt-6 text-4xl leading-[1.15] font-bold tracking-tight text-foreground sm:text-[3.25rem] sm:leading-[1.1]">
-              Articles, distilled
-              <br />
-              to{" "}
-              <span className="relative inline-block text-primary">
-                what matters
-                <span className="absolute -bottom-1 left-0 h-[3px] w-full rounded-full bg-primary/30" />
-              </span>
-              .
-            </h1>
-            <p className="animate-fade-in-up animation-delay-100 mt-6 max-w-lg text-lg leading-relaxed text-muted-foreground">
-              Paste any link. Get a clean, readable view with synced
-              text&#8209;to&#8209;speech. No ads, no clutter — just the words.
-            </p>
-
-            {/* URL input */}
-            <div className="animate-fade-in-up animation-delay-200 mt-10 flex flex-row items-center gap-3">
-              <Input
-                type="url"
-                placeholder="Paste an article link…"
-                className="h-13 flex-1 rounded-xl border border-border/80 bg-card/80 px-5 text-base shadow-md backdrop-blur-sm transition-all duration-300 placeholder:text-muted-foreground/40 focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/20"
-                aria-label="Article URL"
-              />
-              <Button
-                size="icon"
-                className="size-12 shrink-0 rounded-full shadow-md shadow-primary/15 transition-shadow hover:shadow-lg hover:shadow-primary/25"
-                aria-label="Read now"
-              >
-                <LuArrowUpRight className="size-5" />
-              </Button>
-            </div>
-            <p className="animate-fade-in animation-delay-300 mt-3.5 text-xs text-muted-foreground/60">
-              Works with blogs, news sites, essays, newsletters, and more.
-            </p>
-          </div>
-        </section>
+        <HeroSection />
 
         {/* Features */}
         <section
@@ -236,105 +112,7 @@ export default function Home() {
         </section>
       </main>
 
-      {/* Footer */}
-      <footer className="relative z-10 border-t border-border/40">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-6 sm:px-10">
-          <div className="flex items-center gap-2">
-            <PiQuotes className="size-4 text-muted-foreground/60" />
-            <span className="font-(family-name:--font-playfair) text-sm italic text-muted-foreground/60">
-              simple reader
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground/40">
-            made by{" "}
-            <a
-              href="https://github.com/akdevv"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted-foreground/60 decoration-primary underline-offset-3 transition-all hover:text-primary hover:underline"
-            >
-              @akdevv
-            </a>
-          </p>
-        </div>
-      </footer>
-    </div>
-  );
-}
-
-function FeatureCard({
-  icon,
-  title,
-  description,
-  accent,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  accent: "primary" | "secondary";
-}) {
-  const accentClasses =
-    accent === "primary"
-      ? "bg-primary/10 text-primary group-hover:bg-primary/15"
-      : "bg-secondary/10 text-secondary group-hover:bg-secondary/15";
-
-  const borderHover =
-    accent === "primary"
-      ? "hover:border-primary/25"
-      : "hover:border-secondary/25";
-
-  return (
-    <div
-      className={`group relative rounded-2xl border border-border/50 bg-card/50 p-6 backdrop-blur-sm transition-all duration-300 hover:shadow-lg hover:shadow-black/5 ${borderHover}`}
-    >
-      <div
-        className={`mb-4 flex size-10 items-center justify-center rounded-xl transition-colors duration-300 ${accentClasses}`}
-      >
-        {icon}
-      </div>
-      <h3 className="text-base font-semibold tracking-tight text-foreground">
-        {title}
-      </h3>
-      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-        {description}
-      </p>
-    </div>
-  );
-}
-
-function StepCard({
-  number,
-  title,
-  description,
-  icon,
-}: {
-  number: string;
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="group relative overflow-hidden rounded-2xl border border-white/8 bg-linear-to-br from-white/6 to-white/2 p-6 shadow-lg shadow-black/4 backdrop-blur-xl transition-colors duration-300 hover:border-primary/25 dark:from-white/4 dark:to-white/1">
-      {/* Frosted glass shimmer on hover */}
-      <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-primary/4 via-transparent to-secondary/3 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-      {/* Top edge highlight */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-white/20 to-transparent" />
-      {/* Step number watermark */}
-      <span className="absolute top-3 right-4 font-mono text-5xl font-bold tracking-tighter text-primary/6 transition-colors duration-300 group-hover:text-primary/[0.14]">
-        {number}
-      </span>
-      {/* Icon */}
-      <div className="relative mb-4 flex size-10 items-center justify-center rounded-xl border border-primary/15 bg-primary/8 text-primary ring-1 ring-primary/5 transition-colors duration-300 group-hover:border-primary/30 group-hover:bg-primary/15">
-        {icon}
-      </div>
-      <h3 className="relative text-base font-semibold tracking-tight text-foreground">
-        {title}
-      </h3>
-      <p className="relative mt-2 text-sm leading-relaxed text-muted-foreground">
-        {description}
-      </p>
-      {/* Bottom accent line */}
-      <div className="pointer-events-none absolute bottom-0 left-4 right-4 h-px bg-linear-to-r from-transparent via-primary/25 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+      <Footer />
     </div>
   );
 }
