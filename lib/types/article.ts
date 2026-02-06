@@ -1,8 +1,27 @@
+export type ArticleStatus =
+  | "PENDING"
+  | "PROCESSING"
+  | "READY"
+  | "ERROR"
+  | "TTS_PROCESSING"
+  | "TTS_READY";
+
 export interface Article {
   id: string;
   userId: string;
   url: string;
-  title: string;
-  content: string;
+
+  status: ArticleStatus;
+  errorMessage: string | null;
+
+  title: string | null;
+  excerpt: string | null;
+  siteName: string | null;
+
+  sections: unknown;
+  media: unknown;
+  ttsAudio: unknown;
+
   createdAt: Date;
+  updatedAt: Date;
 }

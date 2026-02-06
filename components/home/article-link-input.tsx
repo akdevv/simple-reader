@@ -6,7 +6,6 @@ import { LuArrowUpRight } from "react-icons/lu";
 import { CgSpinnerAlt } from "react-icons/cg";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Article } from "@/lib/types/article";
 import axios from "axios";
 
 export function ArticleLinkInput() {
@@ -27,7 +26,7 @@ export function ArticleLinkInput() {
     setLoading(true);
 
     try {
-      const response = await axios.post<{ data: Article }>("/api/article", { url });
+      const response = await axios.post<{ data: { id: string } }>("/api/article", { url });
       
       if (response.status === 200 && response.data.data.id) {
         router.push(`/r/${response.data.data.id}`);
