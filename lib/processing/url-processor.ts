@@ -200,6 +200,35 @@ function getEmbedUrl(url: string): string {
   return url;
 }
 
+/**
+ * Serialize an element's inline content, preserving links as markdown-style
+ * `[text](href)` so the UI can render them as clickable anchors.
+ * Everything else is flattened to plain text.
+ */
+function inlineHtml(el: Element, baseUrl?: string): string {
+  let out = "";
+  for (const node of Array.from(el.childNodes)) {
+    if (node.nodeType === 3) {
+      out += node.textContent || "";
+    } else if (node.nodeType === 1) {
+      const child = node as Element;
+      if (child.tagName === "A") {
+        const href = child.getAttribute("href");
+        const text = (child.textContent || "").trim();
+        if (href && text) {
+          const resolved = baseUrl ? resolveUrl(href, baseUrl) : href;
+          out += `[${text}](${resolved})`;
+        } else {
+          out += text;
+        }
+      } else {
+        out += inlineHtml(child, baseUrl);
+      }
+    }
+  }
+  return out.trim();
+}
+
 function htmlToSections(
   html: string,
   baseUrl: string
@@ -255,7 +284,7 @@ function htmlToSections(
             }
           });
 
-          const text = (el.textContent || "").trim();
+          const text = inlineHtml(el, baseUrl);
           if (text) {
             sections.push({ type: "paragraph", content: text });
           }
@@ -385,7 +414,7 @@ function htmlToSections(
         case "OL": {
           const items: string[] = [];
           el.querySelectorAll(":scope > li").forEach((li) => {
-            const text = (li.textContent || "").trim();
+            const text = inlineHtml(li, baseUrl);
             if (text) items.push(text);
           });
           if (items.length > 0) {
@@ -393,6 +422,53 @@ function htmlToSections(
               type: "list",
               ordered: tag === "OL",
               items,
+            });
+          }
+          break;
+        }
+
+        case "TABLE": {
+          const caption = el.querySelector("caption")?.textContent?.trim() || undefined;
+          const headers: string[] = [];
+          const rows: string[][] = [];
+
+          // Extract headers from <thead> or first <tr> with <th>
+          const thead = el.querySelector("thead");
+          if (thead) {
+            thead.querySelectorAll("th").forEach((th) => {
+              headers.push(inlineHtml(th, baseUrl));
+            });
+          }
+
+          // If no <thead>, check first row for <th> elements
+          if (headers.length === 0) {
+            const firstRow = el.querySelector("tr");
+            if (firstRow) {
+              const ths = firstRow.querySelectorAll("th");
+              if (ths.length > 0) {
+                ths.forEach((th) => headers.push(inlineHtml(th, baseUrl)));
+              }
+            }
+          }
+
+          // Extract body rows
+          const tbody = el.querySelector("tbody") || el;
+          tbody.querySelectorAll("tr").forEach((tr) => {
+            const cells: string[] = [];
+            const tds = tr.querySelectorAll("td");
+            if (tds.length === 0) return; // Skip header-only rows
+            tds.forEach((td) => cells.push(inlineHtml(td, baseUrl)));
+            if (cells.some((c) => c.trim())) {
+              rows.push(cells);
+            }
+          });
+
+          if (rows.length > 0) {
+            sections.push({
+              type: "table",
+              headers,
+              rows,
+              caption,
             });
           }
           break;
@@ -731,7 +807,9 @@ function extractMedia(sections: ArticleSection[]): MediaItem[] {
   return media;
 }
 
-export async function processUrl(url: string): Promise<ProcessingResult> {
+export async function processUrl(
+  url: string
+): Promise<ProcessingResult> {
   console.log(`[url-processor] Starting extraction for: ${url}`);
 
   // Fetch the page
@@ -739,7 +817,8 @@ export async function processUrl(url: string): Promise<ProcessingResult> {
     headers: {
       "User-Agent":
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      Accept:
+        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "Accept-Language": "en-US,en;q=0.9",
     },
     signal: AbortSignal.timeout(15000),
@@ -747,7 +826,9 @@ export async function processUrl(url: string): Promise<ProcessingResult> {
   });
 
   if (!response.ok) {
-    console.log(`[url-processor] Fetch failed: ${response.status} ${response.statusText}`);
+    console.log(
+      `[url-processor] Fetch failed: ${response.status} ${response.statusText}`
+    );
     throw new Error(
       `Failed to fetch article: ${response.status} ${response.statusText}`
     );
@@ -810,6 +891,7 @@ export async function processUrl(url: string): Promise<ProcessingResult> {
 
   // Convert HTML content to sections
   const sections = htmlToSections(article.content || "", url);
+
   const readabilityImageCount = sections.filter((s) => s.type === "image").length;
   console.log(`[url-processor] Readability output: ${sections.length} sections (${readabilityImageCount} images)`);
 

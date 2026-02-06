@@ -51,6 +51,13 @@ export interface ListSection {
   items: string[];
 }
 
+export interface TableSection {
+  type: "table";
+  headers: string[];
+  rows: string[][];
+  caption?: string;
+}
+
 export type ArticleSection =
   | HeadingSection
   | ParagraphSection
@@ -58,7 +65,8 @@ export type ArticleSection =
   | VideoSection
   | BlockquoteSection
   | CodeSection
-  | ListSection;
+  | ListSection
+  | TableSection;
 
 // --- Media types ---
 export interface ImageMedia {

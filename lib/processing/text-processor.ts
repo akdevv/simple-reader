@@ -148,6 +148,19 @@ function processMarkdown(content: string): {
         });
         break;
 
+      case "table": {
+        const tableToken = token as {
+          header: { text: string }[];
+          rows: { text: string }[][];
+        };
+        sections.push({
+          type: "table",
+          headers: tableToken.header.map((h) => h.text),
+          rows: tableToken.rows.map((row) => row.map((cell) => cell.text)),
+        });
+        break;
+      }
+
       case "space":
         break;
 

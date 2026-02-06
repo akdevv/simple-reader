@@ -2,7 +2,12 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Article, ArticleSection, VideoSection } from "@/lib/types/article";
+import {
+  Article,
+  ArticleSection,
+  VideoSection,
+  TableSection,
+} from "@/lib/types/article";
 import { CgSpinnerAlt } from "react-icons/cg";
 import {
   LuExternalLink,
@@ -267,7 +272,7 @@ function renderSection(section: ArticleSection, index: number) {
           key={index}
           className="mb-5 text-[18px] leading-[1.75] text-foreground/90"
         >
-          {section.content}
+          <RichText text={section.content} />
         </p>
       );
 
@@ -283,7 +288,7 @@ function renderSection(section: ArticleSection, index: number) {
           key={index}
           className="my-6 border-l-3 border-primary/30 pl-5 italic text-foreground/80 text-[17px] leading-[1.7]"
         >
-          {section.content}
+          <RichText text={section.content} />
         </blockquote>
       );
 
@@ -307,15 +312,102 @@ function renderSection(section: ArticleSection, index: number) {
           }`}
         >
           {section.items.map((item, j) => (
-            <li key={j}>{item}</li>
+            <li key={j}>
+              <RichText text={item} />
+            </li>
           ))}
         </ListTag>
       );
     }
 
+    case "table":
+      return <ArticleTable key={index} section={section} />;
+
     default:
       return null;
   }
+}
+
+/**
+ * Parses markdown-style links `[text](url)` in a string and renders them
+ * as clickable anchor elements. Everything else is rendered as plain text.
+ */
+function RichText({ text }: { text: string }) {
+  const LINK_REGEX = /\[([^\]]+)\]\(([^)]+)\)/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = LINK_REGEX.exec(text)) !== null) {
+    // Text before the link
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    parts.push(
+      <a
+        key={match.index}
+        href={match[2]}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary underline decoration-primary/30 underline-offset-2 transition-colors hover:decoration-primary/60"
+      >
+        {match[1]}
+      </a>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Remaining text after last link
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? <>{parts}</> : <>{text}</>;
+}
+
+function ArticleTable({ section }: { section: TableSection }) {
+  return (
+    <div className="my-6 overflow-x-auto rounded-lg border border-border/50">
+      <table className="w-full text-[15px]">
+        {section.caption && (
+          <caption className="px-4 py-2 text-sm text-muted-foreground text-left">
+            {section.caption}
+          </caption>
+        )}
+        {section.headers.length > 0 && (
+          <thead>
+            <tr className="border-b border-border/50 bg-muted/30">
+              {section.headers.map((header, i) => (
+                <th
+                  key={i}
+                  className="px-4 py-2.5 text-left text-sm font-semibold text-foreground"
+                >
+                  <RichText text={header} />
+                </th>
+              ))}
+            </tr>
+          </thead>
+        )}
+        <tbody>
+          {section.rows.map((row, i) => (
+            <tr
+              key={i}
+              className="border-b border-border/30 last:border-b-0 transition-colors hover:bg-muted/20"
+            >
+              {row.map((cell, j) => (
+                <td
+                  key={j}
+                  className="px-4 py-2.5 text-foreground/85 leading-relaxed"
+                >
+                  <RichText text={cell} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function ArticleImage({
