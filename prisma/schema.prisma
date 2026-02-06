@@ -19,7 +19,6 @@ model Article {
   url          String
 
   status       ArticleStatus @default(PENDING)
-  errorMessage String?
 
   title        String?
   excerpt      String?

@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Article } from "@/lib/types/article";
 import { CgSpinnerAlt } from "react-icons/cg";
-import { LuRotateCw, LuExternalLink, LuTriangleAlert } from "react-icons/lu";
+import { LuExternalLink, LuTriangleAlert, LuArrowLeft } from "react-icons/lu";
 import { Button } from "@/components/ui/button";
 import axios from "axios";
 
 export default function ArticlePage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [article, setArticle] = useState<Article | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -25,34 +26,60 @@ export default function ArticlePage() {
       } else {
         setError("Failed to load article");
       }
+      setArticle(null);
     } finally {
       setLoading(false);
     }
   }, [id]);
 
-  const handleRetry = async () => {
-    setLoading(true);
-    setError("");
+  // Trigger processing, returns false if it failed (record deleted)
+  const triggerProcess = useCallback(async () => {
     try {
       await axios.post(`/api/article/${id}/process`);
-    } catch {
-      // process endpoint may fail, still try to fetch
+      return true;
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError("Failed to process article");
+      }
+      setArticle(null);
+      setLoading(false);
+      return false;
     }
-    await fetchArticle();
-  };
+  }, [id]);
 
+  // Initial load: fetch article, then trigger processing if PENDING
   useEffect(() => {
-    fetchArticle();
+    (async () => {
+      await fetchArticle();
+    })();
   }, [fetchArticle]);
 
-  // Poll while PENDING or PROCESSING
+  // When article is PENDING, trigger process and then poll
   useEffect(() => {
-    if (!article) return;
-    if (article.status !== "PENDING" && article.status !== "PROCESSING") return;
+    if (!article || article.status !== "PENDING") return;
+
+    let cancelled = false;
+
+    (async () => {
+      const ok = await triggerProcess();
+      if (!ok || cancelled) return;
+      await fetchArticle();
+    })();
+
+    return () => { cancelled = true; };
+  }, [article?.status, triggerProcess, fetchArticle]);
+
+  // Poll while PROCESSING
+  useEffect(() => {
+    if (!article || article.status !== "PROCESSING") return;
 
     const interval = setInterval(fetchArticle, 3000);
     return () => clearInterval(interval);
-  }, [article, fetchArticle]);
+  }, [article?.status, fetchArticle]);
+
+  const goHome = () => router.push("/");
 
   if (loading) {
     return <StatusShell><LoadingState message="Loading article..." /></StatusShell>;
@@ -61,7 +88,7 @@ export default function ArticlePage() {
   if (error) {
     return (
       <StatusShell>
-        <ErrorState message={error} onRetry={handleRetry} />
+        <ErrorState message={error} onBack={goHome} />
       </StatusShell>
     );
   }
@@ -69,7 +96,7 @@ export default function ArticlePage() {
   if (!article) {
     return (
       <StatusShell>
-        <ErrorState message="Article not found" onRetry={handleRetry} />
+        <ErrorState message="Article not found" onBack={goHome} />
       </StatusShell>
     );
   }
@@ -83,17 +110,6 @@ export default function ArticlePage() {
               ? "Waiting to process article..."
               : "Processing article..."
           }
-        />
-      </StatusShell>
-    );
-  }
-
-  if (article.status === "ERROR") {
-    return (
-      <StatusShell>
-        <ErrorState
-          message={article.errorMessage || "Something went wrong while processing this article"}
-          onRetry={handleRetry}
         />
       </StatusShell>
     );
@@ -181,18 +197,18 @@ function LoadingState({ message }: { message: string }) {
 
 function ErrorState({
   message,
-  onRetry,
+  onBack,
 }: {
   message: string;
-  onRetry: () => void;
+  onBack: () => void;
 }) {
   return (
     <div className="flex flex-col items-center gap-4 text-center max-w-md">
       <LuTriangleAlert className="size-10 text-destructive" />
       <p className="text-lg text-foreground">{message}</p>
-      <Button onClick={onRetry} variant="outline" className="gap-2">
-        <LuRotateCw className="size-4" />
-        Try again
+      <Button onClick={onBack} variant="outline" className="gap-2">
+        <LuArrowLeft className="size-4" />
+        Go back
       </Button>
     </div>
   );

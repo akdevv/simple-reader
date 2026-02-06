@@ -12,7 +12,6 @@ export interface Article {
   url: string;
 
   status: ArticleStatus;
-  errorMessage: string | null;
 
   title: string | null;
   excerpt: string | null;

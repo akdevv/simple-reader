@@ -26,12 +26,15 @@ export function ArticleLinkInput() {
     setLoading(true);
 
     try {
-      const response = await axios.post<{ data: { id: string } }>("/api/article", { url });
-      
+      const response = await axios.post<{ data: { id: string } }>(
+        "/api/article",
+        { url },
+      );
+
       if (response.status === 200 && response.data.data.id) {
-        router.push(`/r/${response.data.data.id}`);
+        router.push(`/articles/${response.data.data.id}`);
       }
-      
+
       setUrl("");
     } catch (err) {
       if (axios.isAxiosError(err) && err.response?.data?.message) {
