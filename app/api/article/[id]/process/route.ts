@@ -82,6 +82,7 @@ export async function POST(
     });
 
     console.log(`[process-route] Article ${id} processed successfully — "${result.title}"`);
+
     return NextResponse.json({ data: updated }, { status: 200 });
   } catch (err) {
     console.error(`[process-route] Error processing article ${id}:`, err);

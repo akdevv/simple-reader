@@ -41,3 +41,8 @@ yarn-error.log*
 next-env.d.ts
 
 /lib/generated/prisma
+/lib/generated/voices
+
+# Generated TTS audio
+public/audio/*/
+!public/audio/test.mp3

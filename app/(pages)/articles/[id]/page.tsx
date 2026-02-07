@@ -12,7 +12,6 @@ import {
 } from "@/lib/types/article";
 import { Sentence, AudioAlignment } from "@/lib/types/audio";
 import { splitSentences } from "@/lib/utils/split-sentences";
-import { generateMockAlignment } from "@/lib/utils/mock-alignment";
 import { useAudioPlayback } from "@/hooks/useAudioPlayback";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { AudioControlBar } from "@/components/audio/AudioControlBar";
@@ -115,6 +114,22 @@ export default function ArticlePage() {
     return () => clearInterval(interval);
   }, [article?.status, fetchArticle]);
 
+  // Poll during TTS_PROCESSING to detect when audio is ready
+  useEffect(() => {
+    if (!article || article.status !== "TTS_PROCESSING") return;
+    const interval = setInterval(fetchArticle, 3000);
+    return () => clearInterval(interval);
+  }, [article?.status, fetchArticle]);
+
+  const triggerTts = useCallback(async () => {
+    try {
+      await axios.post(`/api/article/${id}/tts`);
+      await fetchArticle();
+    } catch {
+      // TTS trigger failed — not critical, user can retry
+    }
+  }, [id, fetchArticle]);
+
   const goBack = () => router.push("/articles");
 
   if (loading) return <ArticleSkeleton />;
@@ -181,6 +196,7 @@ export default function ArticlePage() {
       article={article}
       sections={sections}
       goBack={goBack}
+      onTriggerTts={triggerTts}
     />
   );
 }
@@ -191,10 +207,12 @@ function ArticleContent({
   article,
   sections,
   goBack,
+  onTriggerTts,
 }: {
   article: Article;
   sections: ArticleSection[];
   goBack: () => void;
+  onTriggerTts: () => void;
 }) {
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [audioAlignment, setAudioAlignment] = useState<AudioAlignment | null>(
@@ -202,20 +220,20 @@ function ArticleContent({
   );
 
   // Compute sentences from sections
-  const sentences = useMemo(
-    () => splitSentences(sections),
-    [sections],
-  );
+  const sentences = useMemo(() => splitSentences(sections), [sections]);
 
-  // Build mock alignment when audio is enabled
+  // Use real TTS data when available
   useEffect(() => {
-    if (audioEnabled && sentences.length > 0) {
-      const alignment = generateMockAlignment(sentences, "/audio/test.mp3");
-      setAudioAlignment(alignment);
-    } else {
+    if (!audioEnabled) {
       setAudioAlignment(null);
+      return;
     }
-  }, [audioEnabled, sentences]);
+    if (article.status === "TTS_READY" && article.ttsAudio) {
+      setAudioAlignment(article.ttsAudio as AudioAlignment);
+      return;
+    }
+    setAudioAlignment(null);
+  }, [audioEnabled, sentences, article.status, article.ttsAudio]);
 
   const playback = useAudioPlayback(audioAlignment);
 
@@ -245,7 +263,9 @@ function ArticleContent({
   }, [playback]);
 
   return (
-    <div className={`min-h-screen bg-background ${audioEnabled ? "pb-20" : ""}`}>
+    <div
+      className={`min-h-screen bg-background ${audioEnabled ? "pb-20" : ""}`}
+    >
       <article className="article-content mx-auto max-w-[720px] px-5 py-14 sm:px-8">
         {/* Back nav */}
         <button
@@ -304,16 +324,28 @@ function ArticleContent({
 
           {/* Divider line */}
           <div className="mt-8 flex items-center gap-4">
-            <div className="flex-1 h-px bg-gradient-to-r from-border/80 via-border/40 to-transparent" />
-            {!audioEnabled && sentences.length > 0 && (
-              <button
-                onClick={() => setAudioEnabled(true)}
-                className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-              >
-                <LuHeadphones className="size-3.5" />
-                Listen
-              </button>
-            )}
+            <div className="flex-1 h-px bg-linear-to-r from-border/80 via-border/40 to-transparent" />
+            {!audioEnabled &&
+              sentences.length > 0 &&
+              (article.status === "TTS_PROCESSING" ? (
+                <TtsProgressIndicator ttsAudio={article.ttsAudio} />
+              ) : article.status === "TTS_READY" && article.ttsAudio ? (
+                <button
+                  onClick={() => setAudioEnabled(true)}
+                  className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                >
+                  <LuHeadphones className="size-3.5" />
+                  Listen
+                </button>
+              ) : (
+                <button
+                  onClick={onTriggerTts}
+                  className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                >
+                  <LuHeadphones className="size-3.5" />
+                  Generate Audio
+                </button>
+              ))}
           </div>
         </header>
 
@@ -337,7 +369,7 @@ function ArticleContent({
         </div>
 
         {/* Footer divider */}
-        <div className="mt-16 h-px bg-gradient-to-r from-transparent via-border/60 to-transparent" />
+        <div className="mt-16 h-px bg-linear-to-r from-transparent via-border/60 to-transparent" />
         <div className="mt-6 text-center">
           <button
             onClick={goBack}
@@ -533,51 +565,69 @@ function detectCodeLanguage(code: string): string {
 
   // Shell/Bash commands
   if (
-    /^(npm|npx|yarn|pnpm|bun|pip|cargo|go|docker|git|curl|wget|cd|ls|mkdir|rm|cp|mv|cat|echo|export|source)\s/.test(trimmed) ||
+    /^(npm|npx|yarn|pnpm|bun|pip|cargo|go|docker|git|curl|wget|cd|ls|mkdir|rm|cp|mv|cat|echo|export|source)\s/.test(
+      trimmed,
+    ) ||
     /^\$\s/.test(trimmed) ||
     /^(sudo|apt|brew|dnf|yum)\s/.test(trimmed)
   ) {
-    return 'bash';
+    return "bash";
   }
 
   // JavaScript/TypeScript patterns
   if (
-    /^(import|export|const|let|var|function|class|interface|type|async|await)\s/.test(trimmed) ||
+    /^(import|export|const|let|var|function|class|interface|type|async|await)\s/.test(
+      trimmed,
+    ) ||
     /console\.(log|error|warn|info)/.test(trimmed) ||
     /^\s*(\/\/|\/\*)/.test(trimmed)
   ) {
-    return trimmed.includes('interface') || trimmed.includes('type ') ? 'typescript' : 'javascript';
+    return trimmed.includes("interface") || trimmed.includes("type ")
+      ? "typescript"
+      : "javascript";
   }
 
   // Python
   if (
-    /^(def|class|import|from|if|elif|else|for|while|try|except|with|return|print)\s/.test(trimmed) ||
+    /^(def|class|import|from|if|elif|else|for|while|try|except|with|return|print)\s/.test(
+      trimmed,
+    ) ||
     /^#\s/.test(trimmed)
   ) {
-    return 'python';
+    return "python";
   }
 
   // SQL
-  if (/^(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|FROM|WHERE|JOIN)\s/i.test(trimmed)) {
-    return 'sql';
+  if (
+    /^(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|FROM|WHERE|JOIN)\s/i.test(
+      trimmed,
+    )
+  ) {
+    return "sql";
   }
 
   // JSON
-  if (/^\{[\s\S]*"[\w-]+"[\s\S]*:/.test(trimmed) || /^\[[\s\S]*\{/.test(trimmed)) {
-    return 'json';
+  if (
+    /^\{[\s\S]*"[\w-]+"[\s\S]*:/.test(trimmed) ||
+    /^\[[\s\S]*\{/.test(trimmed)
+  ) {
+    return "json";
   }
 
   // HTML/XML
   if (/^<(!DOCTYPE|html|div|span|p|h[1-6]|a|img|svg)/i.test(trimmed)) {
-    return 'html';
+    return "html";
   }
 
   // CSS
-  if (/^\s*[.#]?[\w-]+\s*\{/.test(trimmed) || /@(media|import|keyframes)/.test(trimmed)) {
-    return 'css';
+  if (
+    /^\s*[.#]?[\w-]+\s*\{/.test(trimmed) ||
+    /@(media|import|keyframes)/.test(trimmed)
+  ) {
+    return "css";
   }
 
-  return 'plaintext';
+  return "plaintext";
 }
 
 function CodeBlock({ section }: { section: CodeSection }) {
@@ -642,7 +692,7 @@ function CodeBlock({ section }: { section: CodeSection }) {
   return (
     <div className="code-block group my-8 relative rounded-xl border border-border/40 bg-[#121212] overflow-hidden">
       {/* Header bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-white/[0.06]">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-white/6">
         <span className="text-[11px] font-mono uppercase tracking-wider text-white/25 select-none">
           {section.language || "code"}
         </span>
@@ -926,6 +976,37 @@ function ArticleSkeleton() {
         </div>
       </div>
     </div>
+  );
+}
+
+function TtsProgressIndicator({ ttsAudio }: { ttsAudio: unknown }) {
+  const progress = ttsAudio as {
+    progress?: { current: number; total: number };
+  } | null;
+  const current = progress?.progress?.current ?? 0;
+  const total = progress?.progress?.total ?? 0;
+  const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+
+  return (
+    <span className="flex items-center gap-2.5 text-xs font-medium text-muted-foreground/50">
+      <CgSpinnerAlt className="size-3.5 animate-spin shrink-0" />
+      <span className="flex items-center gap-2">
+        Generating audio
+        {total > 0 && (
+          <>
+            <span className="h-1 w-16 rounded-full bg-border/40 overflow-hidden">
+              <span
+                className="block h-full rounded-full bg-primary/60 transition-all duration-500 ease-out"
+                style={{ width: `${pct}%` }}
+              />
+            </span>
+            <span className="tabular-nums text-muted-foreground/40">
+              {pct}%
+            </span>
+          </>
+        )}
+      </span>
+    </span>
   );
 }
 
