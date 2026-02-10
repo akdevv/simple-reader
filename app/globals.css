@@ -312,19 +312,3 @@
   padding: 1px 0;
   transition: background-color 0.3s ease, box-shadow 0.3s ease;
 }
-
-/* Audio bar slide-up animation */
-.audio-bar-enter {
-  animation: audio-slide-up 0.3s ease-out both;
-}
-
-@keyframes audio-slide-up {
-  from {
-    transform: translateY(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}

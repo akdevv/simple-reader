@@ -14,8 +14,8 @@ import { Sentence, AudioAlignment } from "@/lib/types/audio";
 import { splitSentences } from "@/lib/utils/split-sentences";
 import { useAudioPlayback } from "@/hooks/useAudioPlayback";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
-import { AudioControlBar } from "@/components/audio/AudioControlBar";
-import { SentenceText } from "@/components/audio/SentenceText";
+import { AudioControlBar } from "@/components/audio/audio-control-bar";
+import { SentenceText } from "@/components/audio/sentence-text";
 import { codeToHtml } from "shiki/bundle/web";
 import { CgSpinnerAlt } from "react-icons/cg";
 import {
@@ -384,8 +384,8 @@ function ArticleContent({
       {audioEnabled && audioAlignment && (
         <AudioControlBar
           isPlaying={playback.isPlaying}
-          currentSentenceIndex={playback.currentSentenceIndex}
-          totalSentences={playback.totalSentences}
+          currentTime={playback.currentTime}
+          duration={playback.duration}
           onToggle={playback.toggle}
           onNext={playback.next}
           onPrev={playback.prev}
