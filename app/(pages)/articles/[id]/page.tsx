@@ -330,21 +330,27 @@ function ArticleContent({
               (article.status === "TTS_PROCESSING" ? (
                 <TtsProgressIndicator ttsAudio={article.ttsAudio} />
               ) : article.status === "TTS_READY" && article.ttsAudio ? (
-                <button
+                <Button
                   onClick={() => setAudioEnabled(true)}
-                  className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                  variant="default"
+                  size="sm"
+                  className="gap-1.5 shadow-sm [&_svg]:size-4"
+                  aria-label="Listen to article"
                 >
-                  <LuHeadphones className="size-3.5" />
+                  <LuHeadphones />
                   Listen
-                </button>
+                </Button>
               ) : (
-                <button
+                <Button
                   onClick={onTriggerTts}
-                  className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                  variant="default"
+                  size="sm"
+                  className="gap-1.5 shadow-sm [&_svg]:size-4"
+                  aria-label="Generate audio for article"
                 >
-                  <LuHeadphones className="size-3.5" />
+                  <LuHeadphones />
                   Generate Audio
-                </button>
+                </Button>
               ))}
           </div>
         </header>
