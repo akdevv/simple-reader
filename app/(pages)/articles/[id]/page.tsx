@@ -33,8 +33,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import axios from "axios";
 
-// ─── Main Page ──────────────────────────────────────────────────────────────
-
 export default function ArticlePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -78,16 +76,11 @@ export default function ArticlePage() {
   const retryProcess = useCallback(async () => {
     setError("");
     setLoading(true);
-    try {
-      await axios.patch(`/api/article/${id}`, {});
-    } catch {
-      // ignore
-    }
     const ok = await triggerProcess();
     if (ok) {
       await fetchArticle();
     }
-  }, [id, triggerProcess, fetchArticle]);
+  }, [triggerProcess, fetchArticle]);
 
   useEffect(() => {
     (async () => {
@@ -200,8 +193,6 @@ export default function ArticlePage() {
     />
   );
 }
-
-// ─── Article Content (with audio) ───────────────────────────────────────────
 
 function ArticleContent({
   article,
@@ -402,8 +393,6 @@ function ArticleContent({
   );
 }
 
-// ─── Section Renderer ───────────────────────────────────────────────────────
-
 function SectionRenderer({
   section,
   sectionIndex,
@@ -513,8 +502,6 @@ function SectionRenderer({
       return null;
   }
 }
-
-// ─── List Renderer (handles per-item sentence mapping) ──────────────────────
 
 function ListRenderer({
   section,
@@ -873,8 +860,6 @@ function ArticleTable({ section }: { section: TableSection }) {
   );
 }
 
-// ─── Image ──────────────────────────────────────────────────────────────────
-
 function ArticleImage({
   section,
 }: {
@@ -941,8 +926,6 @@ function ArticleVideo({ section }: { section: VideoSection }) {
     />
   );
 }
-
-// ─── Skeleton / Status ──────────────────────────────────────────────────────
 
 function ArticleSkeleton() {
   return (

@@ -1,9 +1,7 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:16
-    container_name: local-postgres
+    container_name: simple-reader-postgres
     ports:
       - "5432:5432"
     environment:
@@ -20,20 +18,19 @@ services:
     restart: unless-stopped
 
   app:
-    image: node:20-alpine
-    container_name: nextjs-app
-    working_dir: /app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: simple-reader-app
     ports:
       - "3000:3000"
     environment:
       DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/app_db?schema=public"
       KOKORO_VOICE: af_heart
-      NODE_ENV: development
+      NODE_ENV: production
     volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/.next
-    command: sh -c "corepack enable && corepack prepare pnpm@latest --activate && pnpm install && pnpm run dev"
+      - audio_data:/app/public/audio
+      - kokoro_cache:/root/.cache
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,3 +38,5 @@ services:
 
 volumes:
   postgres_data:
+  audio_data:
+  kokoro_cache:

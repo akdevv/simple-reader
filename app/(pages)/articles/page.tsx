@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Article } from "@/lib/types/article";
 import { Navbar } from "@/components/shared/navbar";
 import { ArticleCard } from "@/components/articles/article-card";
@@ -25,19 +25,27 @@ export default function ArticlesPage() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("new");
   const [filter, setFilter] = useState<FilterStatus>("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const fetchArticles = useCallback(async () => {
     setLoading(true);
     try {
       let url: string;
-      if (searchQuery.trim()) {
+      if (debouncedSearchQuery.trim()) {
         const params = new URLSearchParams({
-          q: searchQuery.trim(),
+          q: debouncedSearchQuery.trim(),
           page: page.toString(),
           limit: "12",
         });
@@ -61,19 +69,11 @@ export default function ArticlesPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, sortBy, filter, page]);
+  }, [debouncedSearchQuery, sortBy, filter, page]);
 
   useEffect(() => {
     fetchArticles();
   }, [fetchArticles]);
-
-  const handleSearchChange = (value: string) => {
-    setSearchQuery(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      setPage(1);
-    }, 300);
-  };
 
   const handleSortChange = (value: string) => {
     setSortBy(value as SortBy);
@@ -115,7 +115,7 @@ export default function ArticlesPage() {
             <LuSearch className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/40" />
             <Input
               value={searchQuery}
-              onChange={(e) => handleSearchChange(e.target.value)}
+              onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by title..."
               className="h-10 pl-10 bg-card/50 border-border/50"
             />
