@@ -3,7 +3,7 @@ import * as ort from "onnxruntime-web";
 import type { Message, ReaderState } from "./messages";
 import { IDLE_STATE } from "./messages";
 import type { Settings } from "./settings";
-import { DEFAULT_SETTINGS, loadSettings, onSettingsChanged } from "./settings";
+import { DEFAULT_SETTINGS } from "./settings";
 
 /**
  * Offscreen document: runs the Piper TTS model fully locally (WASM),
@@ -123,7 +123,6 @@ async function generateAll(texts: string[], startFrom = 0): Promise<void> {
     return;
   }
 
-  settings = await loadSettings(); // never race the startup load
   const model = await loadModel();
   if (mySession !== session) return;
   broadcast({ phase: "generating" });
@@ -268,26 +267,26 @@ chrome.runtime.onMessage.addListener(
       case "sr:get-state":
         sendResponse(state);
         break;
+      case "sr:settings": {
+        const prev = settings;
+        settings = msg.settings;
+        audio.defaultPlaybackRate = settings.speed;
+        audio.playbackRate = settings.speed;
+        if (
+          settings.voiceId !== prev.voiceId &&
+          currentTexts.length > 0 &&
+          state.phase !== "idle" &&
+          state.phase !== "error"
+        ) {
+          // Regenerate the current page with the new voice, resuming nearby.
+          generateAll(currentTexts, Math.max(0, state.index)).catch((err) =>
+            console.error("[simple-reader] voice change failed:", err),
+          );
+        }
+        break;
+      }
     }
   },
 );
-
-loadSettings().then((s) => {
-  settings = s;
-});
-
-onSettingsChanged((patch) => {
-  settings = { ...settings, ...patch };
-  if (patch.speed !== undefined) {
-    audio.defaultPlaybackRate = settings.speed;
-    audio.playbackRate = settings.speed;
-  }
-  if (patch.voiceId !== undefined && currentTexts.length > 0 && state.phase !== "idle" && state.phase !== "error") {
-    // Regenerate the current page with the new voice, resuming near where we were.
-    generateAll(currentTexts, Math.max(0, state.index)).catch((err) =>
-      console.error("[simple-reader] voice change failed:", err),
-    );
-  }
-});
 
 purgeExpired().catch(() => {});

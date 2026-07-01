@@ -1,5 +1,7 @@
 /** Messages passed between popup, background, content script and offscreen doc. */
 
+import type { Settings } from "./settings";
+
 export type Phase =
   | "idle"
   | "extracting"
@@ -39,4 +41,6 @@ export type Message =
   | { type: "sr:get-state" } // popup -> offscreen
   | { type: "sr:state"; state: ReaderState } // offscreen -> everyone
   | { type: "sr:highlight"; index: number } // background -> content
-  | { type: "sr:clear" }; // background -> content
+  | { type: "sr:clear" } // background -> content
+  // background -> offscreen; offscreen docs can't read chrome.storage themselves
+  | { type: "sr:settings"; settings: Settings };
