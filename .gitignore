@@ -47,3 +47,7 @@ next-env.d.ts
 
 # Generated TTS audio
 public/audio/*/
+
+# browser extension
+extension/node_modules
+extension/dist
