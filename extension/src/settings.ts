@@ -31,14 +31,16 @@ export const DEFAULT_SETTINGS: Settings = {
 
 /** get() with defaults merges stored values over them. */
 export async function loadSettings(): Promise<Settings> {
+  if (!chrome.storage?.local) return { ...DEFAULT_SETTINGS };
   return (await chrome.storage.local.get(DEFAULT_SETTINGS)) as Settings;
 }
 
 export function saveSettings(patch: Partial<Settings>): void {
-  chrome.storage.local.set(patch).catch(() => {});
+  chrome.storage?.local?.set(patch).catch(() => {});
 }
 
 export function onSettingsChanged(cb: (patch: Partial<Settings>) => void): void {
+  if (!chrome.storage?.onChanged) return;
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
     const patch: Partial<Settings> = {};
