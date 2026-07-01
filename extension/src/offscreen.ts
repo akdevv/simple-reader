@@ -2,6 +2,8 @@ import { TtsSession } from "@mintplex-labs/piper-tts-web";
 import * as ort from "onnxruntime-web";
 import type { Message, ReaderState } from "./messages";
 import { IDLE_STATE } from "./messages";
+import type { Settings } from "./settings";
+import { DEFAULT_SETTINGS, loadSettings, onSettingsChanged } from "./settings";
 
 /**
  * Offscreen document: runs the Piper TTS model fully locally (WASM),
@@ -10,8 +12,6 @@ import { IDLE_STATE } from "./messages";
  * script (highlighting, via background relay) stay in sync.
  */
 
-// ponytail: "low" = 16 kHz = fastest inference; en_US-hfc_female-medium if quality matters more
-const VOICE = "en_US-amy-low";
 const CACHE_NAME = "simple-reader-tts";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // keep generated audio for 6 hours
 
@@ -23,10 +23,15 @@ Object.defineProperty(ort.env.wasm, "numThreads", {
 });
 
 let tts: TtsSession | null = null;
+/** Voice the current session was created with; a mismatch forces a reload. */
+let ttsVoice = "";
+let settings: Settings = { ...DEFAULT_SETTINGS };
 let state: ReaderState = { ...IDLE_STATE };
 /** Bump on every new page/stop so stale async loops abort. */
 let session = 0;
 let audioUrls: (string | null)[] = [];
+/** Sentences of the current page, kept so a voice change can regenerate them. */
+let currentTexts: string[] = [];
 const audio = new Audio();
 
 function broadcast(patch: Partial<ReaderState>): void {
@@ -39,7 +44,7 @@ function broadcast(patch: Partial<ReaderState>): void {
 /* ---------- cache ---------- */
 
 async function cacheKey(text: string): Promise<string> {
-  const data = new TextEncoder().encode(`${VOICE}|${text}`);
+  const data = new TextEncoder().encode(`${settings.voiceId}|${text}`);
   const hash = await crypto.subtle.digest("SHA-256", data);
   const hex = Array.from(new Uint8Array(hash))
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -81,10 +86,12 @@ async function purgeExpired(): Promise<void> {
 /* ---------- tts ---------- */
 
 async function loadModel(): Promise<TtsSession> {
-  if (tts) return tts;
+  if (tts && ttsVoice === settings.voiceId) return tts;
   broadcast({ phase: "loading-model", modelProgress: 0 });
+  ttsVoice = settings.voiceId;
+  // ponytail: old session is just dropped on voice change; fine for a few voices
   tts = await TtsSession.create({
-    voiceId: VOICE,
+    voiceId: settings.voiceId,
     // Everything loads from the extension bundle, never from a CDN
     // (remote scripts are blocked by the extension CSP). The voice model
     // itself is fetched from HuggingFace once and cached in OPFS by the lib.
@@ -102,11 +109,12 @@ async function loadModel(): Promise<TtsSession> {
   return tts;
 }
 
-async function generateAll(texts: string[]): Promise<void> {
+async function generateAll(texts: string[], startFrom = 0): Promise<void> {
   const mySession = ++session;
   stopPlayback();
   audioUrls.forEach((u) => u && URL.revokeObjectURL(u));
   audioUrls = new Array(texts.length).fill(null);
+  currentTexts = texts;
   state = { ...IDLE_STATE };
   broadcast({ phase: "loading-model", total: texts.length });
 
@@ -115,11 +123,19 @@ async function generateAll(texts: string[]): Promise<void> {
     return;
   }
 
+  settings = await loadSettings(); // never race the startup load
   const model = await loadModel();
   if (mySession !== session) return;
   broadcast({ phase: "generating" });
 
-  for (let i = 0; i < texts.length; i++) {
+  // Generate from the resume point first (e.g. after a mid-page voice change),
+  // then wrap around for anything before it.
+  const order = [...Array(texts.length).keys()].map(
+    (i) => (i + startFrom) % texts.length,
+  );
+  let done = 0;
+
+  for (const i of order) {
     if (mySession !== session) return;
 
     const key = await cacheKey(texts[i]);
@@ -137,10 +153,10 @@ async function generateAll(texts: string[]): Promise<void> {
 
     // "" marks a failed sentence: playback skips it instead of waiting forever
     audioUrls[i] = wav ? URL.createObjectURL(wav) : "";
-    broadcast({ generated: i + 1 });
+    broadcast({ generated: ++done });
 
     // Start playing as soon as the first sentence is ready.
-    if (i === 0) playSentence(0, mySession);
+    if (i === startFrom) playSentence(startFrom, mySession);
   }
 }
 
@@ -167,6 +183,9 @@ function playSentence(index: number, mySession = session): void {
     return;
   }
   audio.src = url;
+  // loading a new src resets playbackRate to defaultPlaybackRate — set both
+  audio.defaultPlaybackRate = settings.speed;
+  audio.playbackRate = settings.speed;
   audio.play().catch((err) => console.error("[simple-reader] play:", err));
   broadcast({ phase: "playing", index });
 }
@@ -252,5 +271,23 @@ chrome.runtime.onMessage.addListener(
     }
   },
 );
+
+loadSettings().then((s) => {
+  settings = s;
+});
+
+onSettingsChanged((patch) => {
+  settings = { ...settings, ...patch };
+  if (patch.speed !== undefined) {
+    audio.defaultPlaybackRate = settings.speed;
+    audio.playbackRate = settings.speed;
+  }
+  if (patch.voiceId !== undefined && currentTexts.length > 0 && state.phase !== "idle" && state.phase !== "error") {
+    // Regenerate the current page with the new voice, resuming near where we were.
+    generateAll(currentTexts, Math.max(0, state.index)).catch((err) =>
+      console.error("[simple-reader] voice change failed:", err),
+    );
+  }
+});
 
 purgeExpired().catch(() => {});

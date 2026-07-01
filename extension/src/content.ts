@@ -1,5 +1,6 @@
 import { splitTextIntoSentences } from "@/lib/utils/split-sentences";
 import type { Message } from "./messages";
+import { loadSettings, onSettingsChanged } from "./settings";
 
 /**
  * Content script: extracts readable sentences from the live DOM and
@@ -116,10 +117,28 @@ function highlight(index: number): void {
   }
 }
 
+/** Overrides the default color from content.css with the user's choice. */
+function applyHighlightColor(color: string): void {
+  let style = document.getElementById(
+    "simple-reader-style",
+  ) as HTMLStyleElement | null;
+  if (!style) {
+    style = document.createElement("style");
+    style.id = "simple-reader-style";
+    document.head.appendChild(style);
+  }
+  style.textContent = `::highlight(${HIGHLIGHT_NAME}) { background-color: ${color}; color: inherit; }`;
+}
+
 // Guard against double-injection: register the listener only once.
 // (typeof check lets the pure extraction logic run under jsdom in tests)
 if (typeof chrome !== "undefined" && chrome.runtime && !window.__simpleReaderRanges) {
   window.__simpleReaderRanges = [];
+
+  loadSettings().then((s) => applyHighlightColor(s.highlightColor));
+  onSettingsChanged((patch) => {
+    if (patch.highlightColor) applyHighlightColor(patch.highlightColor);
+  });
 
   chrome.runtime.onMessage.addListener(
     (msg: Message | { type: "sr:extract" }) => {
