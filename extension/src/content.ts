@@ -135,11 +135,6 @@ function applyHighlightColor(color: string): void {
 if (typeof chrome !== "undefined" && chrome.runtime && !window.__simpleReaderRanges) {
   window.__simpleReaderRanges = [];
 
-  loadSettings().then((s) => applyHighlightColor(s.highlightColor));
-  onSettingsChanged((patch) => {
-    if (patch.highlightColor) applyHighlightColor(patch.highlightColor);
-  });
-
   chrome.runtime.onMessage.addListener(
     (msg: Message | { type: "sr:extract" }) => {
       switch (msg.type) {
@@ -162,4 +157,14 @@ if (typeof chrome !== "undefined" && chrome.runtime && !window.__simpleReaderRan
       }
     },
   );
+
+  // Settings are cosmetic — never let them break the reader itself.
+  try {
+    loadSettings().then((s) => applyHighlightColor(s.highlightColor));
+    onSettingsChanged((patch) => {
+      if (patch.highlightColor) applyHighlightColor(patch.highlightColor);
+    });
+  } catch (err) {
+    console.error("[simple-reader] settings unavailable:", err);
+  }
 }

@@ -3,7 +3,7 @@
   "name": "Simple Reader",
   "version": "0.1.0",
   "description": "Read any webpage aloud with a fully local TTS model and in-place sentence highlighting.",
-  "permissions": ["offscreen", "activeTab", "scripting"],
+  "permissions": ["offscreen", "activeTab", "scripting", "storage"],
   "background": { "service_worker": "background.js" },
   "action": {
     "default_popup": "popup.html",
