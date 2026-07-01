@@ -17,9 +17,18 @@ async function ensureOffscreen(): Promise<void> {
   });
 }
 
+// Pages Chrome never lets extensions touch.
+const RESTRICTED_URL =
+  /^(chrome|chrome-extension|edge|about|devtools|view-source):|^https:\/\/chrome\.google\.com\/webstore|^https:\/\/chromewebstore\.google\.com/;
+
 async function startReading(): Promise<void> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) return;
+  if (!tab?.id) throw new Error("No active tab found.");
+  if (tab.url && RESTRICTED_URL.test(tab.url)) {
+    throw new Error(
+      "Chrome doesn't allow extensions on this page. Try a regular article.",
+    );
+  }
   readingTabId = tab.id;
 
   await ensureOffscreen();
@@ -40,14 +49,16 @@ chrome.runtime.onMessage.addListener((msg: Message, sender) => {
     case "sr:start":
       startReading().catch((err) => {
         console.error("[simple-reader] start failed:", err);
-        // e.g. chrome:// pages where scripts can't be injected
         chrome.runtime
           .sendMessage({
             type: "sr:state",
             state: {
               ...IDLE_STATE,
               phase: "error",
-              error: "This page can't be read.",
+              error:
+                err instanceof Error && err.message
+                  ? err.message
+                  : "This page can't be read.",
             },
           } satisfies Message)
           .catch(() => {});
