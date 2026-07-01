@@ -7,8 +7,9 @@
     "watch": "node build.mjs --watch"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.8.1",
-    "kokoro-js": "^1.2.1"
+    "@diffusionstudio/piper-wasm": "1.0.0",
+    "@mintplex-labs/piper-tts-web": "^1.0.4",
+    "onnxruntime-web": "1.18.0"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.280",

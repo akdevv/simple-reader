@@ -1,30 +1,28 @@
-import { KokoroTTS } from "kokoro-js";
-import { env } from "@huggingface/transformers";
+import { TtsSession } from "@mintplex-labs/piper-tts-web";
+import * as ort from "onnxruntime-web";
 import type { Message, ReaderState } from "./messages";
 import { IDLE_STATE } from "./messages";
 
 /**
- * Offscreen document: runs the Kokoro TTS model fully locally (WASM),
+ * Offscreen document: runs the Piper TTS model fully locally (WASM),
  * caches generated sentence audio for a few hours, and plays it back.
  * Broadcasts state so the popup (progress/controls) and the content
  * script (highlighting, via background relay) stay in sync.
  */
 
-const MODEL = "onnx-community/Kokoro-82M-v1.0-ONNX";
-const DTYPE = "q8"; // ponytail: quantized = the "faster model"; drop to q4 if wasm is too slow
-const VOICE = "af_heart";
+// ponytail: "low" = 16 kHz = fastest inference; en_US-hfc_female-medium if quality matters more
+const VOICE = "en_US-amy-low";
 const CACHE_NAME = "simple-reader-tts";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // keep generated audio for 6 hours
 
-// Load onnxruntime's wasm from the extension bundle, never from a CDN
-// (remote scripts are blocked by the extension CSP).
-env.backends.onnx.wasm!.wasmPaths = chrome.runtime.getURL("ort/");
 // Multi-threaded ort spawns blob: workers, which the extension CSP blocks.
-// ponytail: single thread; switch device to "webgpu" if wasm proves too slow
-env.backends.onnx.wasm!.numThreads = 1;
-env.allowLocalModels = false;
+// piper-tts-web sets numThreads to hardwareConcurrency during init, so pin it.
+Object.defineProperty(ort.env.wasm, "numThreads", {
+  get: () => 1,
+  set: () => {},
+});
 
-let tts: KokoroTTS | null = null;
+let tts: TtsSession | null = null;
 let state: ReaderState = { ...IDLE_STATE };
 /** Bump on every new page/stop so stale async loops abort. */
 let session = 0;
@@ -41,7 +39,7 @@ function broadcast(patch: Partial<ReaderState>): void {
 /* ---------- cache ---------- */
 
 async function cacheKey(text: string): Promise<string> {
-  const data = new TextEncoder().encode(`${MODEL}|${VOICE}|${text}`);
+  const data = new TextEncoder().encode(`${VOICE}|${text}`);
   const hash = await crypto.subtle.digest("SHA-256", data);
   const hex = Array.from(new Uint8Array(hash))
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -80,45 +78,24 @@ async function purgeExpired(): Promise<void> {
   }
 }
 
-/* ---------- wav encoding (float32 mono, same layout as kokoro-worker.mjs) ---------- */
-
-function encodeWav(samples: Float32Array, sampleRate: number): Blob {
-  const header = new DataView(new ArrayBuffer(44));
-  const writeStr = (off: number, s: string) => {
-    for (let i = 0; i < s.length; i++) header.setUint8(off + i, s.charCodeAt(i));
-  };
-  writeStr(0, "RIFF");
-  header.setUint32(4, 36 + samples.length * 4, true);
-  writeStr(8, "WAVE");
-  writeStr(12, "fmt ");
-  header.setUint32(16, 16, true);
-  header.setUint16(20, 3, true); // IEEE float
-  header.setUint16(22, 1, true); // mono
-  header.setUint32(24, sampleRate, true);
-  header.setUint32(28, sampleRate * 4, true);
-  header.setUint16(32, 4, true);
-  header.setUint16(34, 32, true);
-  writeStr(36, "data");
-  header.setUint32(40, samples.length * 4, true);
-  const data = new Uint8Array(
-    samples.buffer as ArrayBuffer,
-    samples.byteOffset,
-    samples.byteLength,
-  );
-  return new Blob([header.buffer, data], { type: "audio/wav" });
-}
-
 /* ---------- tts ---------- */
 
-async function loadModel(): Promise<KokoroTTS> {
+async function loadModel(): Promise<TtsSession> {
   if (tts) return tts;
   broadcast({ phase: "loading-model", modelProgress: 0 });
-  tts = await KokoroTTS.from_pretrained(MODEL, {
-    dtype: DTYPE,
-    device: "wasm",
-    progress_callback: (p: { status: string; progress?: number }) => {
-      if (p.status === "progress" && typeof p.progress === "number") {
-        broadcast({ modelProgress: Math.round(p.progress) });
+  tts = await TtsSession.create({
+    voiceId: VOICE,
+    // Everything loads from the extension bundle, never from a CDN
+    // (remote scripts are blocked by the extension CSP). The voice model
+    // itself is fetched from HuggingFace once and cached in OPFS by the lib.
+    wasmPaths: {
+      onnxWasm: chrome.runtime.getURL("ort/"),
+      piperData: chrome.runtime.getURL("piper/piper_phonemize.data"),
+      piperWasm: chrome.runtime.getURL("piper/piper_phonemize.wasm"),
+    },
+    progress: (p) => {
+      if (p.url.endsWith(".onnx") && p.total > 0) {
+        broadcast({ modelProgress: Math.round((p.loaded / p.total) * 100) });
       }
     },
   });
@@ -149,17 +126,17 @@ async function generateAll(texts: string[]): Promise<void> {
     let wav = await cacheGet(key);
     if (!wav) {
       try {
-        const result = await model.generate(texts[i], { voice: VOICE });
-        wav = encodeWav(result.audio as Float32Array, result.sampling_rate);
+        wav = await model.predict(texts[i]);
         await cachePut(key, wav);
       } catch (err) {
         console.error(`[simple-reader] sentence ${i} failed:`, err);
-        wav = encodeWav(new Float32Array(2400), 24000); // 0.1s silence
+        wav = null; // skip this sentence rather than abort the page
       }
     }
     if (mySession !== session) return;
 
-    audioUrls[i] = URL.createObjectURL(wav);
+    // "" marks a failed sentence: playback skips it instead of waiting forever
+    audioUrls[i] = wav ? URL.createObjectURL(wav) : "";
     broadcast({ generated: i + 1 });
 
     // Start playing as soon as the first sentence is ready.
@@ -174,10 +151,19 @@ function playSentence(index: number, mySession = session): void {
   if (index < 0 || index >= audioUrls.length) return;
 
   const url = audioUrls[index];
-  if (!url) {
+  if (url === null) {
     // Not generated yet — mark position; onended/generation catches up below.
     broadcast({ phase: "playing", index });
     waitForSentence(index, mySession);
+    return;
+  }
+  if (url === "") {
+    // Generation failed for this sentence — skip it.
+    if (index + 1 >= audioUrls.length) {
+      broadcast({ phase: "done", index: -1 });
+    } else {
+      playSentence(index + 1, mySession);
+    }
     return;
   }
   audio.src = url;
@@ -192,7 +178,7 @@ function waitForSentence(index: number, mySession: number): void {
       clearInterval(timer);
       return;
     }
-    if (audioUrls[index]) {
+    if (audioUrls[index] !== null) {
       clearInterval(timer);
       playSentence(index, mySession);
     }
