@@ -1,9 +1,10 @@
 import type { Message, ReaderState } from "./messages";
 import { IDLE_STATE } from "./messages";
+import type { Settings } from "./settings";
 import {
+  DEFAULT_SETTINGS,
   HIGHLIGHT_COLORS,
   SPEEDS,
-  VOICES,
   loadSettings,
   saveSettings,
 } from "./settings";
@@ -23,6 +24,12 @@ function show(name: keyof typeof views): void {
   }
 }
 
+/** Show the bar only for a real download (determinate); spinner covers the rest. */
+function setLoadingBar(pct: number | null): void {
+  $("loading-bar").hidden = pct === null;
+  ($("loading-fill") as HTMLElement).style.width = pct === null ? "0%" : `${pct}%`;
+}
+
 function render(state: ReaderState): void {
   switch (state.phase) {
     case "idle":
@@ -32,17 +39,22 @@ function render(state: ReaderState): void {
     case "extracting":
       show("loading");
       $("loading-label").textContent = "Reading page…";
-      ($("loading-fill") as HTMLElement).style.width = "10%";
+      $("loading-hint").textContent = "";
+      setLoadingBar(null);
       break;
 
     case "loading-model":
       show("loading");
+      // No progress events = the voice is already downloaded, just warming up.
       $("loading-label").textContent =
         state.modelProgress > 0
           ? `Downloading voice… ${state.modelProgress}%`
-          : "Loading voice…";
-      ($("loading-fill") as HTMLElement).style.width =
-        `${state.modelProgress}%`;
+          : "Preparing voice…";
+      $("loading-hint").textContent =
+        state.modelProgress > 0
+          ? "Only happens once — it's cached after this"
+          : "";
+      setLoadingBar(state.modelProgress > 0 ? state.modelProgress : null);
       break;
 
     case "generating":
@@ -53,12 +65,12 @@ function render(state: ReaderState): void {
 
       const generating =
         state.phase !== "done" && state.generated < state.total;
-      $("gen-label").hidden = !generating;
+      $("gen-row").hidden = !generating;
       $("gen-label").textContent =
-        `Generating audio… ${state.generated}/${state.total}`;
+        `Generating audio ${state.generated}/${state.total}`;
 
-      $("icon-play").hidden = state.phase === "playing";
-      $("icon-pause").hidden = state.phase !== "playing";
+      // Per product decision: ▶ is shown WHILE playing (status), ⏸ when paused.
+      $("btn-toggle").classList.toggle("playing", state.phase === "playing");
 
       const pos = Math.max(0, state.index);
       ($("progress-fill") as HTMLElement).style.width = state.total
@@ -66,9 +78,9 @@ function render(state: ReaderState): void {
         : "0%";
       $("sentence-label").textContent =
         state.phase === "done"
-          ? "Finished"
+          ? "Finished — press to replay"
           : state.index >= 0
-            ? `Sentence ${state.index + 1} of ${state.total}`
+            ? `${state.phase === "playing" ? "Playing" : "Paused"} · ${state.index + 1} of ${state.total}`
             : `${state.total} sentences`;
 
       ($("btn-prev") as HTMLButtonElement).disabled = state.index <= 0;
@@ -98,9 +110,11 @@ $("btn-retry").addEventListener("click", () => {
   render({ ...IDLE_STATE, phase: "extracting" });
   send({ type: "sr:start" });
 });
-$("btn-toggle").addEventListener("click", () =>
-  send({ type: "sr:control", action: "toggle" }),
-);
+$("btn-toggle").addEventListener("click", () => {
+  // Flip optimistically for instant feedback; the state broadcast corrects it.
+  $("btn-toggle").classList.toggle("playing");
+  send({ type: "sr:control", action: "toggle" });
+});
 $("btn-next").addEventListener("click", () =>
   send({ type: "sr:control", action: "next" }),
 );
@@ -110,25 +124,27 @@ $("btn-prev").addEventListener("click", () =>
 
 /* ---------- settings ---------- */
 
+let currentSettings: Settings = { ...DEFAULT_SETTINGS };
+
+/** Persist AND push directly to the offscreen doc (it can't read storage). */
+function updateSettings(patch: Partial<Settings>): void {
+  currentSettings = { ...currentSettings, ...patch };
+  saveSettings(patch);
+  send({ type: "sr:settings", settings: currentSettings });
+}
+
 const panel = $("panel-settings");
 $("btn-settings").addEventListener("click", () => {
   panel.hidden = !panel.hidden;
+  $("btn-settings").setAttribute("aria-expanded", String(!panel.hidden));
 });
-
-const voiceSelect = $("sel-voice") as HTMLSelectElement;
-for (const voice of VOICES) {
-  voiceSelect.add(new Option(voice.label, voice.id));
-}
-voiceSelect.addEventListener("change", () =>
-  saveSettings({ voiceId: voiceSelect.value }),
-);
 
 const speedSelect = $("sel-speed") as HTMLSelectElement;
 for (const speed of SPEEDS) {
   speedSelect.add(new Option(`${speed}×`, String(speed)));
 }
 speedSelect.addEventListener("change", () =>
-  saveSettings({ speed: Number(speedSelect.value) }),
+  updateSettings({ speed: Number(speedSelect.value) }),
 );
 
 const swatches = $("swatches");
@@ -149,14 +165,14 @@ for (const { name, value } of HIGHLIGHT_COLORS) {
   btn.setAttribute("data-color", value);
   btn.style.backgroundColor = value;
   btn.addEventListener("click", () => {
-    saveSettings({ highlightColor: value });
+    updateSettings({ highlightColor: value });
     markActiveSwatch(value);
   });
   swatches.appendChild(btn);
 }
 
 loadSettings().then((s) => {
-  voiceSelect.value = s.voiceId;
+  currentSettings = s;
   speedSelect.value = String(s.speed);
   markActiveSwatch(s.highlightColor);
 });
@@ -168,8 +184,10 @@ chrome.runtime.onMessage.addListener((msg: Message) => {
   if (msg.type === "sr:state") render(msg.state);
 });
 
-// Initial state: ask the offscreen doc; no answer means nothing is running.
+// Render idle immediately so the popup opens at full size (no layout jump),
+// then ask the offscreen doc; no answer means nothing is running.
+render(IDLE_STATE);
 chrome.runtime
   .sendMessage({ type: "sr:get-state" } satisfies Message)
   .then((state?: ReaderState) => render(state ?? IDLE_STATE))
-  .catch(() => render(IDLE_STATE));
+  .catch(() => {});

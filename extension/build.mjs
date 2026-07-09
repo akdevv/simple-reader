@@ -41,6 +41,7 @@ const ctx = await esbuild.context({
     "src/content.ts",
     "src/offscreen.ts",
     "src/popup.ts",
+    "src/tts-worker.ts",
   ],
   bundle: true,
   format: "iife",

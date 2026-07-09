@@ -1,37 +1,24 @@
-import { TtsSession } from "@mintplex-labs/piper-tts-web";
-import * as ort from "onnxruntime-web";
 import type { Message, ReaderState } from "./messages";
 import { IDLE_STATE } from "./messages";
 import type { Settings } from "./settings";
 import { DEFAULT_SETTINGS } from "./settings";
 
 /**
- * Offscreen document: runs the Piper TTS model fully locally (WASM),
- * caches generated sentence audio for a few hours, and plays it back.
- * Broadcasts state so the popup (progress/controls) and the content
- * script (highlighting, via background relay) stay in sync.
+ * Offscreen document: owns audio playback, caching and state, and delegates
+ * Piper inference to a worker (tts-worker.ts) so this thread — playback,
+ * highlight/state messaging — never blocks while a sentence generates.
  */
 
+// ponytail: "low" = 16 kHz = fastest inference; en_US-hfc_female-medium if quality matters more
+const VOICE = "en_US-amy-low";
 const CACHE_NAME = "simple-reader-tts";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // keep generated audio for 6 hours
 
-// Multi-threaded ort spawns blob: workers, which the extension CSP blocks.
-// piper-tts-web sets numThreads to hardwareConcurrency during init, so pin it.
-Object.defineProperty(ort.env.wasm, "numThreads", {
-  get: () => 1,
-  set: () => {},
-});
-
-let tts: TtsSession | null = null;
-/** Voice the current session was created with; a mismatch forces a reload. */
-let ttsVoice = "";
 let settings: Settings = { ...DEFAULT_SETTINGS };
 let state: ReaderState = { ...IDLE_STATE };
 /** Bump on every new page/stop so stale async loops abort. */
 let session = 0;
 let audioUrls: (string | null)[] = [];
-/** Sentences of the current page, kept so a voice change can regenerate them. */
-let currentTexts: string[] = [];
 const audio = new Audio();
 
 function broadcast(patch: Partial<ReaderState>): void {
@@ -44,7 +31,7 @@ function broadcast(patch: Partial<ReaderState>): void {
 /* ---------- cache ---------- */
 
 async function cacheKey(text: string): Promise<string> {
-  const data = new TextEncoder().encode(`${settings.voiceId}|${text}`);
+  const data = new TextEncoder().encode(`${VOICE}|${text}`);
   const hash = await crypto.subtle.digest("SHA-256", data);
   const hex = Array.from(new Uint8Array(hash))
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -83,38 +70,84 @@ async function purgeExpired(): Promise<void> {
   }
 }
 
-/* ---------- tts ---------- */
+/* ---------- tts (inference lives in tts-worker.ts) ---------- */
 
-async function loadModel(): Promise<TtsSession> {
-  if (tts && ttsVoice === settings.voiceId) return tts;
-  broadcast({ phase: "loading-model", modelProgress: 0 });
-  ttsVoice = settings.voiceId;
-  // ponytail: old session is just dropped on voice change; fine for a few voices
-  tts = await TtsSession.create({
-    voiceId: settings.voiceId,
-    // Everything loads from the extension bundle, never from a CDN
-    // (remote scripts are blocked by the extension CSP). The voice model
-    // itself is fetched from HuggingFace once and cached in OPFS by the lib.
-    wasmPaths: {
-      onnxWasm: chrome.runtime.getURL("ort/"),
-      piperData: chrome.runtime.getURL("piper/piper_phonemize.data"),
-      piperWasm: chrome.runtime.getURL("piper/piper_phonemize.wasm"),
-    },
-    progress: (p) => {
-      if (p.url.endsWith(".onnx") && p.total > 0) {
-        broadcast({ modelProgress: Math.round((p.loaded / p.total) * 100) });
+const worker = new Worker("tts-worker.js");
+let workerReady: Promise<void> | null = null;
+let resolveReady: (() => void) | null = null;
+let rejectReady: ((err: Error) => void) | null = null;
+let predictId = 0;
+const pendingPredictions = new Map<
+  number,
+  { resolve: (wav: Blob) => void; reject: (err: Error) => void }
+>();
+
+worker.onmessage = (e) => {
+  const msg = e.data;
+  switch (msg.type) {
+    case "progress":
+      broadcast({ modelProgress: msg.pct });
+      break;
+    case "ready":
+      resolveReady?.();
+      break;
+    case "result": {
+      const pending = pendingPredictions.get(msg.id);
+      pendingPredictions.delete(msg.id);
+      pending?.resolve(new Blob([msg.buf], { type: "audio/wav" }));
+      break;
+    }
+    case "error": {
+      const err = new Error(msg.message);
+      if (msg.id === -1) {
+        rejectReady?.(err);
+        workerReady = null; // allow a retry
+      } else {
+        const pending = pendingPredictions.get(msg.id);
+        pendingPredictions.delete(msg.id);
+        pending?.reject(err);
       }
-    },
-  });
-  return tts;
+      break;
+    }
+  }
+};
+
+async function loadModel(): Promise<void> {
+  if (!workerReady) {
+    broadcast({ phase: "loading-model", modelProgress: 0 });
+    workerReady = new Promise<void>((resolve, reject) => {
+      resolveReady = resolve;
+      rejectReady = reject;
+    });
+    worker.postMessage({
+      type: "init",
+      voiceId: VOICE,
+      // Everything loads from the extension bundle, never from a CDN
+      // (remote scripts are blocked by the extension CSP). The voice model
+      // itself is fetched from HuggingFace once and cached in OPFS by the lib.
+      wasmPaths: {
+        onnxWasm: chrome.runtime.getURL("ort/"),
+        piperData: chrome.runtime.getURL("piper/piper_phonemize.data"),
+        piperWasm: chrome.runtime.getURL("piper/piper_phonemize.wasm"),
+      },
+    });
+  }
+  return workerReady;
 }
 
-async function generateAll(texts: string[], startFrom = 0): Promise<void> {
+function predict(text: string): Promise<Blob> {
+  const id = ++predictId;
+  return new Promise((resolve, reject) => {
+    pendingPredictions.set(id, { resolve, reject });
+    worker.postMessage({ type: "predict", id, text });
+  });
+}
+
+async function generateAll(texts: string[]): Promise<void> {
   const mySession = ++session;
   stopPlayback();
   audioUrls.forEach((u) => u && URL.revokeObjectURL(u));
   audioUrls = new Array(texts.length).fill(null);
-  currentTexts = texts;
   state = { ...IDLE_STATE };
   broadcast({ phase: "loading-model", total: texts.length });
 
@@ -123,25 +156,18 @@ async function generateAll(texts: string[], startFrom = 0): Promise<void> {
     return;
   }
 
-  const model = await loadModel();
+  await loadModel();
   if (mySession !== session) return;
   broadcast({ phase: "generating" });
 
-  // Generate from the resume point first (e.g. after a mid-page voice change),
-  // then wrap around for anything before it.
-  const order = [...Array(texts.length).keys()].map(
-    (i) => (i + startFrom) % texts.length,
-  );
-  let done = 0;
-
-  for (const i of order) {
+  for (let i = 0; i < texts.length; i++) {
     if (mySession !== session) return;
 
     const key = await cacheKey(texts[i]);
     let wav = await cacheGet(key);
     if (!wav) {
       try {
-        wav = await model.predict(texts[i]);
+        wav = await predict(texts[i]);
         await cachePut(key, wav);
       } catch (err) {
         console.error(`[simple-reader] sentence ${i} failed:`, err);
@@ -152,10 +178,10 @@ async function generateAll(texts: string[], startFrom = 0): Promise<void> {
 
     // "" marks a failed sentence: playback skips it instead of waiting forever
     audioUrls[i] = wav ? URL.createObjectURL(wav) : "";
-    broadcast({ generated: ++done });
+    broadcast({ generated: i + 1 });
 
     // Start playing as soon as the first sentence is ready.
-    if (i === startFrom) playSentence(startFrom, mySession);
+    if (i === 0) playSentence(0, mySession);
   }
 }
 
@@ -267,26 +293,26 @@ chrome.runtime.onMessage.addListener(
       case "sr:get-state":
         sendResponse(state);
         break;
-      case "sr:settings": {
-        const prev = settings;
-        settings = msg.settings;
-        audio.defaultPlaybackRate = settings.speed;
-        audio.playbackRate = settings.speed;
-        if (
-          settings.voiceId !== prev.voiceId &&
-          currentTexts.length > 0 &&
-          state.phase !== "idle" &&
-          state.phase !== "error"
-        ) {
-          // Regenerate the current page with the new voice, resuming nearby.
-          generateAll(currentTexts, Math.max(0, state.index)).catch((err) =>
-            console.error("[simple-reader] voice change failed:", err),
-          );
-        }
+      case "sr:settings":
+        applySettings(msg.settings);
         break;
-      }
     }
   },
 );
+
+function applySettings(next: Settings): void {
+  settings = next;
+  console.log("[simple-reader] settings applied:", JSON.stringify(next));
+  audio.defaultPlaybackRate = next.speed;
+  audio.playbackRate = next.speed;
+}
+
+// Pull stored settings once on startup; live changes arrive from the popup.
+chrome.runtime
+  .sendMessage({ type: "sr:get-settings" } satisfies Message)
+  .then((stored?: Settings) => {
+    if (stored) applySettings(stored);
+  })
+  .catch(() => {});
 
 purgeExpired().catch(() => {});

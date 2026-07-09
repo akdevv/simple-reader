@@ -1,36 +1,22 @@
 import type { Message } from "./messages";
 import { IDLE_STATE } from "./messages";
-import { loadSettings, onSettingsChanged } from "./settings";
+import { loadSettings } from "./settings";
 
 /** Tab currently being read; offscreen state messages get relayed here for highlighting. */
 let readingTabId: number | null = null;
-
-/** Offscreen docs can't access chrome.storage — push settings to them. */
-async function pushSettings(): Promise<void> {
-  const settings = await loadSettings();
-  await chrome.runtime
-    .sendMessage({ type: "sr:settings", settings } satisfies Message)
-    .catch(() => {}); // no offscreen doc yet — fine
-}
 
 async function ensureOffscreen(): Promise<void> {
   const contexts = await chrome.runtime.getContexts({
     contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
   });
-  if (contexts.length === 0) {
-    await chrome.offscreen.createDocument({
-      url: "offscreen.html",
-      reasons: [chrome.offscreen.Reason.AUDIO_PLAYBACK],
-      justification:
-        "Runs the local text-to-speech model and plays the generated audio.",
-    });
-  }
-  await pushSettings();
+  if (contexts.length > 0) return;
+  await chrome.offscreen.createDocument({
+    url: "offscreen.html",
+    reasons: [chrome.offscreen.Reason.AUDIO_PLAYBACK],
+    justification:
+      "Runs the local text-to-speech model and plays the generated audio.",
+  });
 }
-
-onSettingsChanged(() => {
-  pushSettings().catch(() => {});
-});
 
 // Pages Chrome never lets extensions touch.
 const RESTRICTED_URL =
@@ -59,8 +45,13 @@ async function startReading(): Promise<void> {
   await chrome.tabs.sendMessage(tab.id, { type: "sr:extract" });
 }
 
-chrome.runtime.onMessage.addListener((msg: Message, sender) => {
+chrome.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {
   switch (msg.type) {
+    // Offscreen doc asks for settings on startup (it can't read chrome.storage).
+    case "sr:get-settings":
+      loadSettings().then(sendResponse);
+      return true; // respond asynchronously
+
     case "sr:start":
       startReading().catch((err) => {
         console.error("[simple-reader] start failed:", err);

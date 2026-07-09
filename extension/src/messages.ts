@@ -42,5 +42,7 @@ export type Message =
   | { type: "sr:state"; state: ReaderState } // offscreen -> everyone
   | { type: "sr:highlight"; index: number } // background -> content
   | { type: "sr:clear" } // background -> content
-  // background -> offscreen; offscreen docs can't read chrome.storage themselves
-  | { type: "sr:settings"; settings: Settings };
+  // popup -> offscreen; offscreen docs can't read chrome.storage themselves
+  | { type: "sr:settings"; settings: Settings }
+  // offscreen -> background (which responds with stored settings)
+  | { type: "sr:get-settings" };
