@@ -1,11 +1,14 @@
-import { splitTextIntoSentences } from "@/lib/utils/split-sentences";
-import type { Message } from "./messages";
-import { loadSettings, onSettingsChanged } from "./settings";
+import { splitTextIntoSentences } from "@/lib/split-sentences";
+import type { Message } from "@/shared/messages";
+import "./content.css";
 
 /**
  * Content script: extracts readable sentences from the live DOM and
  * highlights the currently-spoken one in place using the native
  * CSS Custom Highlight API (no DOM mutation).
+ *
+ * While reading is active it also owns the on-page controls:
+ * space = play/pause, arrows = prev/next, click a sentence = jump to it.
  */
 
 const HIGHLIGHT_NAME = "simple-reader-sentence";
@@ -103,8 +106,7 @@ function extractPage(): { texts: string[]; ranges: Range[] } {
 }
 
 function highlight(index: number): void {
-  const ranges = window.__simpleReaderRanges;
-  const range = ranges?.[index];
+  const range = window.__simpleReaderRanges?.[index];
   if (!range) return;
   CSS.highlights.set(HIGHLIGHT_NAME, new Highlight(range));
 
@@ -117,54 +119,97 @@ function highlight(index: number): void {
   }
 }
 
-/** Overrides the default color from content.css with the user's choice. */
-function applyHighlightColor(color: string): void {
-  let style = document.getElementById(
-    "simple-reader-style",
-  ) as HTMLStyleElement | null;
-  if (!style) {
-    style = document.createElement("style");
-    style.id = "simple-reader-style";
-    document.head.appendChild(style);
-  }
-  style.textContent = `::highlight(${HIGHLIGHT_NAME}) { background-color: ${color}; color: inherit; }`;
+/* ---------- on-page controls ---------- */
+
+/** True between the first highlight and the next clear — i.e. while reading. */
+let active = false;
+
+function send(msg: Message): void {
+  chrome.runtime.sendMessage(msg).catch(() => {});
 }
 
-// Guard against double-injection: register the listener only once.
-// (typeof check lets the pure extraction logic run under jsdom in tests)
-if (typeof chrome !== "undefined" && chrome.runtime && !window.__simpleReaderRanges) {
+function isEditable(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return (
+    target.closest("input, textarea, select, [contenteditable]") !== null
+  );
+}
+
+function onKeydown(e: KeyboardEvent): void {
+  if (!active || isEditable(e.target)) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+  switch (e.code) {
+    case "Space":
+      e.preventDefault();
+      send({ type: "sr:control", action: "toggle" });
+      break;
+    case "ArrowRight":
+      e.preventDefault();
+      send({ type: "sr:control", action: "next" });
+      break;
+    case "ArrowLeft":
+      e.preventDefault();
+      send({ type: "sr:control", action: "prev" });
+      break;
+  }
+}
+
+/** Click a sentence to jump there. */
+function onClick(e: MouseEvent): void {
+  if (!active) return;
+  // Never hijack real interactions.
+  if (
+    e.defaultPrevented ||
+    (e.target instanceof Element &&
+      e.target.closest("a, button, input, textarea, select, [contenteditable]"))
+  ) {
+    return;
+  }
+
+  const caret = document.caretRangeFromPoint(e.clientX, e.clientY);
+  if (!caret) return;
+
+  const ranges = window.__simpleReaderRanges ?? [];
+  const index = ranges.findIndex((range) => {
+    try {
+      return range.isPointInRange(caret.startContainer, caret.startOffset);
+    } catch {
+      return false;
+    }
+  });
+  if (index >= 0) send({ type: "sr:seek", index });
+}
+
+/* ---------- wiring ---------- */
+
+// Guard against double-injection: register listeners only once.
+if (
+  typeof chrome !== "undefined" &&
+  chrome.runtime &&
+  !window.__simpleReaderRanges
+) {
   window.__simpleReaderRanges = [];
 
-  chrome.runtime.onMessage.addListener(
-    (msg: Message | { type: "sr:extract" }) => {
-      switch (msg.type) {
-        case "sr:extract": {
-          const { texts, ranges } = extractPage();
-          window.__simpleReaderRanges = ranges;
-          chrome.runtime.sendMessage({
-            type: "sr:sentences",
-            texts,
-            pageKey: location.href,
-          } satisfies Message);
-          break;
-        }
-        case "sr:highlight":
-          highlight(msg.index);
-          break;
-        case "sr:clear":
-          CSS.highlights.delete(HIGHLIGHT_NAME);
-          break;
+  chrome.runtime.onMessage.addListener((msg: Message) => {
+    switch (msg.type) {
+      case "sr:extract": {
+        const { texts, ranges } = extractPage();
+        window.__simpleReaderRanges = ranges;
+        send({ type: "sr:sentences", texts, pageKey: location.href });
+        break;
       }
-    },
-  );
+      case "sr:highlight":
+        active = true;
+        highlight(msg.index);
+        break;
+      case "sr:clear":
+        active = false;
+        CSS.highlights.delete(HIGHLIGHT_NAME);
+        break;
+    }
+  });
 
-  // Settings are cosmetic — never let them break the reader itself.
-  try {
-    loadSettings().then((s) => applyHighlightColor(s.highlightColor));
-    onSettingsChanged((patch) => {
-      if (patch.highlightColor) applyHighlightColor(patch.highlightColor);
-    });
-  } catch (err) {
-    console.error("[simple-reader] settings unavailable:", err);
-  }
+  document.addEventListener("keydown", onKeydown);
+  document.addEventListener("click", onClick);
 }

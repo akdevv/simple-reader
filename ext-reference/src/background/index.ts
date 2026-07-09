@@ -1,6 +1,6 @@
-import type { Message } from "./messages";
-import { IDLE_STATE } from "./messages";
-import { loadSettings } from "./settings";
+import type { Message } from "@/shared/messages";
+import { IDLE_STATE } from "@/shared/messages";
+import { loadSettings } from "@/shared/settings";
 
 /** Tab currently being read; offscreen state messages get relayed here for highlighting. */
 let readingTabId: number | null = null;
@@ -11,7 +11,7 @@ async function ensureOffscreen(): Promise<void> {
   });
   if (contexts.length > 0) return;
   await chrome.offscreen.createDocument({
-    url: "offscreen.html",
+    url: "src/offscreen/index.html",
     reasons: [chrome.offscreen.Reason.AUDIO_PLAYBACK],
     justification:
       "Runs the local text-to-speech model and plays the generated audio.",
@@ -33,16 +33,13 @@ async function startReading(): Promise<void> {
   readingTabId = tab.id;
 
   await ensureOffscreen();
-  await chrome.scripting.insertCSS({
-    target: { tabId: tab.id },
-    files: ["content.css"],
-  });
-  await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    files: ["content.js"],
-  });
-  // Content script is idempotent; ask it to (re)extract the page.
-  await chrome.tabs.sendMessage(tab.id, { type: "sr:extract" });
+  // Content script is statically registered and idempotent; if the page
+  // predates the extension install this throws and surfaces as an error.
+  try {
+    await chrome.tabs.sendMessage(tab.id, { type: "sr:extract" });
+  } catch {
+    throw new Error("Can't reach this page — reload it and try again.");
+  }
 }
 
 chrome.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {

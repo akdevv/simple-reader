@@ -1,7 +1,7 @@
-import type { Message, ReaderState } from "./messages";
-import { IDLE_STATE } from "./messages";
-import type { Settings } from "./settings";
-import { DEFAULT_SETTINGS } from "./settings";
+import type { Message, ReaderState } from "@/shared/messages";
+import { IDLE_STATE } from "@/shared/messages";
+import type { Settings } from "@/shared/settings";
+import { DEFAULT_SETTINGS } from "@/shared/settings";
 
 /**
  * Offscreen document: owns audio playback, caching and state, and delegates
@@ -72,7 +72,9 @@ async function purgeExpired(): Promise<void> {
 
 /* ---------- tts (inference lives in tts-worker.ts) ---------- */
 
-const worker = new Worker("tts-worker.js");
+const worker = new Worker(new URL("./tts-worker.ts", import.meta.url), {
+  type: "module",
+});
 let workerReady: Promise<void> | null = null;
 let resolveReady: (() => void) | null = null;
 let rejectReady: ((err: Error) => void) | null = null;
@@ -275,34 +277,38 @@ function handleControl(action: "toggle" | "next" | "prev" | "stop"): void {
   }
 }
 
-chrome.runtime.onMessage.addListener(
-  (msg: Message, _sender, sendResponse) => {
-    switch (msg.type) {
-      case "sr:generate":
-        generateAll(msg.texts).catch((err) => {
-          console.error("[simple-reader] generation failed:", err);
-          broadcast({
-            phase: "error",
-            error: err instanceof Error ? err.message : "TTS failed",
-          });
+chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
+  switch (msg.type) {
+    case "sr:generate":
+      generateAll(msg.texts).catch((err) => {
+        console.error("[simple-reader] generation failed:", err);
+        broadcast({
+          phase: "error",
+          error: err instanceof Error ? err.message : "TTS failed",
         });
-        break;
-      case "sr:control":
-        handleControl(msg.action);
-        break;
-      case "sr:get-state":
-        sendResponse(state);
-        break;
-      case "sr:settings":
-        applySettings(msg.settings);
-        break;
-    }
-  },
-);
+      });
+      break;
+    case "sr:control":
+      handleControl(msg.action);
+      break;
+    // Sentence clicked on the page — jump there and play (even if paused,
+    // clicking a sentence is an unambiguous "read this now").
+    case "sr:seek":
+      if (state.phase === "playing" || state.phase === "paused" || state.phase === "generating" || state.phase === "done") {
+        playSentence(msg.index);
+      }
+      break;
+    case "sr:get-state":
+      sendResponse(state);
+      break;
+    case "sr:settings":
+      applySettings(msg.settings);
+      break;
+  }
+});
 
 function applySettings(next: Settings): void {
   settings = next;
-  console.log("[simple-reader] settings applied:", JSON.stringify(next));
   audio.defaultPlaybackRate = next.speed;
   audio.playbackRate = next.speed;
 }

@@ -37,7 +37,8 @@ export type Message =
   | { type: "sr:extract" } // background -> content
   | { type: "sr:sentences"; texts: string[]; pageKey: string } // content -> background
   | { type: "sr:generate"; texts: string[]; pageKey: string } // background -> offscreen
-  | { type: "sr:control"; action: "toggle" | "next" | "prev" | "stop" } // popup/background -> offscreen
+  | { type: "sr:control"; action: "toggle" | "next" | "prev" | "stop" } // popup/content -> offscreen
+  | { type: "sr:seek"; index: number } // content (sentence click) -> offscreen
   | { type: "sr:get-state" } // popup -> offscreen
   | { type: "sr:state"; state: ReaderState } // offscreen -> everyone
   | { type: "sr:highlight"; index: number } // background -> content

@@ -1,13 +1,7 @@
-import type { Message, ReaderState } from "./messages";
-import { IDLE_STATE } from "./messages";
-import type { Settings } from "./settings";
-import {
-  DEFAULT_SETTINGS,
-  HIGHLIGHT_COLORS,
-  SPEEDS,
-  loadSettings,
-  saveSettings,
-} from "./settings";
+import type { Message, ReaderState } from "@/shared/messages";
+import { IDLE_STATE } from "@/shared/messages";
+import type { Settings } from "@/shared/settings";
+import { DEFAULT_SETTINGS, SPEEDS, loadSettings, saveSettings } from "@/shared/settings";
 
 const $ = (id: string) => document.getElementById(id)!;
 
@@ -102,19 +96,20 @@ function send(msg: Message): void {
 
 /* ---------- playback controls ---------- */
 
-$("btn-start").addEventListener("click", () => {
+function start(): void {
   render({ ...IDLE_STATE, phase: "extracting" });
   send({ type: "sr:start" });
-});
-$("btn-retry").addEventListener("click", () => {
-  render({ ...IDLE_STATE, phase: "extracting" });
-  send({ type: "sr:start" });
-});
-$("btn-toggle").addEventListener("click", () => {
+}
+
+function toggle(): void {
   // Flip optimistically for instant feedback; the state broadcast corrects it.
   $("btn-toggle").classList.toggle("playing");
   send({ type: "sr:control", action: "toggle" });
-});
+}
+
+$("btn-start").addEventListener("click", start);
+$("btn-retry").addEventListener("click", start);
+$("btn-toggle").addEventListener("click", toggle);
 $("btn-next").addEventListener("click", () =>
   send({ type: "sr:control", action: "next" }),
 );
@@ -122,59 +117,48 @@ $("btn-prev").addEventListener("click", () =>
   send({ type: "sr:control", action: "prev" }),
 );
 
-/* ---------- settings ---------- */
+/* ---------- keyboard (while the popup is open) ---------- */
 
-let currentSettings: Settings = { ...DEFAULT_SETTINGS };
-
-/** Persist AND push directly to the offscreen doc (it can't read storage). */
-function updateSettings(patch: Partial<Settings>): void {
-  currentSettings = { ...currentSettings, ...patch };
-  saveSettings(patch);
-  send({ type: "sr:settings", settings: currentSettings });
-}
-
-const panel = $("panel-settings");
-$("btn-settings").addEventListener("click", () => {
-  panel.hidden = !panel.hidden;
-  $("btn-settings").setAttribute("aria-expanded", String(!panel.hidden));
+document.addEventListener("keydown", (e) => {
+  if (views.player.hidden) return;
+  switch (e.code) {
+    case "Space":
+      e.preventDefault(); // don't "click" the focused button too
+      toggle();
+      break;
+    case "ArrowRight":
+      e.preventDefault();
+      send({ type: "sr:control", action: "next" });
+      break;
+    case "ArrowLeft":
+      e.preventDefault();
+      send({ type: "sr:control", action: "prev" });
+      break;
+  }
 });
 
-const speedSelect = $("sel-speed") as HTMLSelectElement;
-for (const speed of SPEEDS) {
-  speedSelect.add(new Option(`${speed}×`, String(speed)));
-}
-speedSelect.addEventListener("change", () =>
-  updateSettings({ speed: Number(speedSelect.value) }),
-);
+/* ---------- speed ---------- */
 
-const swatches = $("swatches");
-function markActiveSwatch(color: string): void {
-  for (const el of swatches.children) {
-    el.setAttribute(
-      "aria-checked",
-      String(el.getAttribute("data-color") === color),
-    );
-  }
+let currentSettings: Settings = { ...DEFAULT_SETTINGS };
+const speedBtn = $("btn-speed") as HTMLButtonElement;
+
+function renderSpeed(): void {
+  speedBtn.textContent = `${currentSettings.speed}×`;
 }
-for (const { name, value } of HIGHLIGHT_COLORS) {
-  const btn = document.createElement("button");
-  btn.className = "swatch";
-  btn.title = name;
-  btn.setAttribute("role", "radio");
-  btn.setAttribute("aria-checked", "false");
-  btn.setAttribute("data-color", value);
-  btn.style.backgroundColor = value;
-  btn.addEventListener("click", () => {
-    updateSettings({ highlightColor: value });
-    markActiveSwatch(value);
-  });
-  swatches.appendChild(btn);
-}
+
+speedBtn.addEventListener("click", () => {
+  const i = SPEEDS.indexOf(currentSettings.speed);
+  const speed = SPEEDS[(i + 1) % SPEEDS.length] ?? 1;
+  currentSettings = { ...currentSettings, speed };
+  renderSpeed();
+  saveSettings({ speed });
+  // Push directly to the offscreen doc (it can't read storage itself).
+  send({ type: "sr:settings", settings: currentSettings });
+});
 
 loadSettings().then((s) => {
   currentSettings = s;
-  speedSelect.value = String(s.speed);
-  markActiveSwatch(s.highlightColor);
+  renderSpeed();
 });
 
 /* ---------- state sync ---------- */
