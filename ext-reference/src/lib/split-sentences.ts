@@ -25,7 +25,7 @@ export function splitTextIntoSentences(text: string): string[] {
     if (i + 1 < text.length && !/\s/.test(text[i + 1])) continue;
 
     const candidate = text.slice(start, i + 1).trim();
-    const lastWord = candidate.split(/\s+/).pop()?.replace(/\./g, "").toLowerCase();
+    const lastWord = candidate.split(/\s+/).pop()?.replace(/\.$/, "").toLowerCase();
     if (lastWord && ABBREVIATIONS.has(lastWord)) continue;
 
     if (candidate) sentences.push(candidate);
