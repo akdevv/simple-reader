@@ -1,17 +1,83 @@
 ---
-
+import Layout from "@/layouts/Layout.astro";
+import Navbar from "@/components/Navbar.astro";
+import Footer from "@/components/Footer.astro";
+import HeroSection from "@/components/HeroSection.astro";
+import FeatureCard from "@/components/FeatureCard.astro";
+import StepCard from "@/components/StepCard.astro";
+import Faq from "@/components/Faq.astro";
 ---
 
-<html lang="en">
-    <head>
-        <meta charset="utf-8" />
-        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-        <link rel="icon" href="/favicon.ico" />
-        <meta name="viewport" content="width=device-width" />
-        <meta name="generator" content={Astro.generator} />
-        <title>Astro</title>
-    </head>
-    <body>
-        <h1>Astro</h1>
-    </body>
-</html>
+<Layout>
+    <div
+        class="mx-auto flex min-h-screen max-w-6xl flex-col border-border/60 sm:border-x"
+    >
+        <Navbar />
+
+        <main class="flex-1">
+            <HeroSection />
+
+            {/* Features */}
+            <section
+                id="features"
+                class="border-t border-border/60 px-6 py-20 sm:px-10 sm:py-24"
+            >
+                <h2
+                    class="font-serif text-2xl font-medium tracking-tight text-foreground sm:text-3xl"
+                >
+                    What it does
+                </h2>
+                <div class="mt-12 grid gap-10 sm:grid-cols-3 sm:gap-8">
+                    <FeatureCard
+                        title="A clean reading view"
+                        description="The article, the words, nothing else. No ads, no pop-ups, no cookie banners."
+                        accent="primary"
+                    />
+                    <FeatureCard
+                        title="Audio that follows along"
+                        description="A natural voice reads to you and highlights each sentence as it goes."
+                        accent="secondary"
+                    />
+                    <FeatureCard
+                        title="A place to save things"
+                        description="Keep articles for later and pick up where you stopped."
+                        accent="primary"
+                    />
+                </div>
+            </section>
+
+            {/* How it works */}
+            <section
+                id="how"
+                class="border-t border-border/60 px-6 py-20 sm:px-10 sm:py-24"
+            >
+                <h2
+                    class="font-serif text-2xl font-medium tracking-tight text-foreground sm:text-3xl"
+                >
+                    How it works
+                </h2>
+                <div class="mt-12 grid gap-10 sm:grid-cols-3 sm:gap-8">
+                    <StepCard
+                        number="1"
+                        title="Add an article"
+                        description="Paste a link, or clip the page you're on straight from your browser."
+                    />
+                    <StepCard
+                        number="2"
+                        title="Read it, or press play"
+                        description="The clean view opens instantly. The audio keeps your place as it reads."
+                    />
+                    <StepCard
+                        number="3"
+                        title="Come back anytime"
+                        description="Your spot is saved. Finish tomorrow, or next week."
+                    />
+                </div>
+            </section>
+
+            <Faq />
+        </main>
+
+        <Footer />
+    </div>
+</Layout>

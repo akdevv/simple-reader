@@ -1,0 +1,28 @@
+---
+import { Icon } from "astro-icon/components";
+---
+
+<footer class="border-t border-border/60">
+    <div class="flex items-center justify-between px-6 py-6 sm:px-10">
+        <div class="flex items-center gap-2">
+            <Icon
+                name="lucide:quote"
+                class="size-3.5 text-muted-foreground/60"
+            />
+            <span class="font-serif text-sm italic text-muted-foreground/70">
+                simple reader
+            </span>
+        </div>
+        <p class="text-xs text-muted-foreground/60">
+            made by
+            <a
+                href="https://github.com/akdevv"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-muted-foreground underline decoration-border underline-offset-3 transition-colors hover:text-primary hover:decoration-primary"
+            >
+                @akdevv
+            </a>
+        </p>
+    </div>
+</footer>

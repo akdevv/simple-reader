@@ -1,0 +1,137 @@
+---
+import { Icon } from "astro-icon/components";
+
+const navLinks = [
+    { href: "/#features", label: "Features" },
+    { href: "/#how", label: "How it works" },
+    { href: "/#faq", label: "FAQ" },
+];
+---
+
+<header
+    class="relative z-50 flex items-center justify-between border-b border-border/60 px-6 py-5 sm:px-10"
+>
+    <a href="/" class="flex items-center gap-2.5">
+        <Icon name="lucide:quote" class="size-6 text-primary" />
+        <span
+            class="font-serif text-lg font-semibold italic tracking-tight text-foreground"
+        >
+            simple reader
+        </span>
+    </a>
+
+    {/* Desktop nav */}
+    <nav
+        class="hidden items-center gap-8 text-sm font-medium text-muted-foreground sm:flex"
+    >
+        {
+            navLinks.map((link) => (
+                <a
+                    href={link.href}
+                    class="transition-colors hover:text-primary"
+                >
+                    {link.label}
+                </a>
+            ))
+        }
+    </nav>
+
+    {/* Mobile hamburger button */}
+    <button
+        id="nav-toggle"
+        class="relative z-50 flex size-10 items-center justify-center sm:hidden"
+        aria-label="Open menu"
+        aria-expanded="false"
+    >
+        <div class="flex w-5 flex-col items-end gap-1.25">
+            <span
+                id="nav-line-1"
+                data-open="w-5 translate-y-[6.5px] rotate-45"
+                data-closed="w-5"
+                class="block h-[1.5px] w-5 rounded-full bg-foreground transition-all duration-300 ease-out"
+            ></span>
+            <span
+                id="nav-line-2"
+                data-open="w-0 opacity-0"
+                data-closed="w-3.5"
+                class="block h-[1.5px] w-3.5 rounded-full bg-foreground transition-all duration-300 ease-out"
+            ></span>
+            <span
+                id="nav-line-3"
+                data-open="w-5 -translate-y-[6.5px] -rotate-45"
+                data-closed="w-5"
+                class="block h-[1.5px] w-5 rounded-full bg-foreground transition-all duration-300 ease-out"
+            ></span>
+        </div>
+    </button>
+</header>
+
+{/* Mobile fullscreen overlay */}
+<div
+    id="nav-overlay"
+    data-open="visible opacity-100"
+    data-closed="invisible opacity-0"
+    class="fixed inset-0 z-40 flex flex-col bg-background transition-all duration-500 ease-out sm:hidden invisible opacity-0"
+>
+    {/* Nav content — centered vertically */}
+    <nav class="relative flex flex-1 flex-col items-start justify-center px-10">
+        <ul class="flex flex-col gap-2">
+            {
+                navLinks.map((link, i) => (
+                    <li>
+                        <a
+                            href={link.href}
+                            data-nav-link
+                            data-open="translate-x-0 opacity-100"
+                            data-closed="-translate-x-6 opacity-0"
+                            data-open-delay={`${150 + i * 75}ms`}
+                            class="block py-3 font-serif text-3xl text-foreground/85 transition-all duration-300 -translate-x-6 opacity-0"
+                        >
+                            {link.label}
+                        </a>
+                    </li>
+                ))
+            }
+        </ul>
+    </nav>
+</div>
+
+<script>
+    const toggle = document.getElementById("nav-toggle")!;
+    const staggered =
+        document.querySelectorAll<HTMLElement>("[data-open-delay]");
+    const swap = document.querySelectorAll<HTMLElement>(
+        "[data-open][data-closed]",
+    );
+    let isOpen = false;
+
+    function applyState() {
+        swap.forEach((el) => {
+            const on = (el.dataset.open ?? "").split(" ").filter(Boolean);
+            const off = (el.dataset.closed ?? "").split(" ").filter(Boolean);
+            el.classList.remove(...(isOpen ? off : on));
+            el.classList.add(...(isOpen ? on : off));
+        });
+        staggered.forEach((el) => {
+            el.style.transitionDelay = isOpen
+                ? (el.dataset.openDelay ?? "0ms")
+                : "0ms";
+        });
+        toggle.setAttribute("aria-label", isOpen ? "Close menu" : "Open menu");
+        toggle.setAttribute("aria-expanded", String(isOpen));
+        document.body.style.overflow = isOpen ? "hidden" : "";
+    }
+
+    toggle.addEventListener("click", () => {
+        isOpen = !isOpen;
+        applyState();
+    });
+
+    // Close menu when a nav link is clicked
+    document.querySelectorAll("[data-nav-link]").forEach((link) => {
+        link.addEventListener("click", () => {
+            isOpen = false;
+            applyState();
+        });
+    });
+</script>
