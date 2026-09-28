@@ -2,15 +2,11 @@ import { splitTextIntoSentences } from "@/lib/split-sentences";
 import type { Message } from "@/shared/messages";
 import "./content.css";
 
-/**
- * Content script: extracts readable sentences from the live DOM and
- * highlights the currently-spoken one in place using the native
- * CSS Custom Highlight API (no DOM mutation).
- *
- * While reading is active it also owns the on-page controls:
- * space = play/pause, arrows = prev/next, click a sentence = jump to it.
- */
+// Extracts sentences from the page, highlights the spoken one via the
+// CSS Custom Highlight API, and handles on-page controls while reading
+// (space/arrows/click-to-jump).
 
+// must match ::highlight(...) in content.css
 const HIGHLIGHT_NAME = "simple-reader-sentence";
 const BLOCK_SELECTOR = "p, h1, h2, h3, h4, h5, h6, li, blockquote";
 const SKIP_ANCESTORS = "nav, header, footer, aside, [aria-hidden='true']";
@@ -25,12 +21,9 @@ function isVisible(el: Element): boolean {
   return el.getClientRects().length > 0;
 }
 
-/**
- * Build sentence texts + DOM Ranges for one block element.
- * Walks text nodes, builds a whitespace-normalized string while keeping a
- * map from each normalized char back to its (node, offset), then splits
- * the normalized text into sentences and maps them back to Ranges.
- */
+// Split one block's text into sentences, each with a DOM Range.
+// Normalizes whitespace but tracks each char's original (node, offset)
+// so sentence boundaries map back to exact Range positions.
 export function extractFromBlock(
   block: Element,
 ): { text: string; range: Range }[] {
@@ -42,7 +35,7 @@ export function extractFromBlock(
   });
 
   let normalized = "";
-  // position of normalized[i] in the DOM
+  // positions[i] = DOM location of normalized[i]
   const positions: { node: Text; offset: number }[] = [];
 
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -57,8 +50,7 @@ export function extractFromBlock(
     }
   }
 
-  const trimmed = normalized.trim();
-  if (trimmed.length < 2) return [];
+  if (normalized.trim().length < 2) return [];
 
   const sentences = splitTextIntoSentences(normalized);
   const results: { text: string; range: Range }[] = [];
@@ -90,19 +82,15 @@ function extractPage(): { texts: string[]; ranges: Range[] } {
     (el) =>
       isVisible(el) &&
       !el.closest(SKIP_ANCESTORS) &&
-      // keep innermost blocks only (e.g. skip a blockquote that contains a <p>)
+      // innermost blocks only — avoids duplicating nested text
       !el.querySelector(BLOCK_SELECTOR),
   );
 
-  const texts: string[] = [];
-  const ranges: Range[] = [];
-  for (const block of candidates) {
-    for (const { text, range } of extractFromBlock(block)) {
-      texts.push(text);
-      ranges.push(range);
-    }
-  }
-  return { texts, ranges };
+  const sentences = candidates.flatMap(extractFromBlock);
+  return {
+    texts: sentences.map((s) => s.text),
+    ranges: sentences.map((s) => s.range),
+  };
 }
 
 function highlight(index: number): void {
@@ -121,10 +109,11 @@ function highlight(index: number): void {
 
 /* ---------- on-page controls ---------- */
 
-/** True between the first highlight and the next clear — i.e. while reading. */
+// true while reading (first highlight → clear)
 let active = false;
 
 function send(msg: Message): void {
+  // rejects when no listener (worker asleep) — safe to drop
   chrome.runtime.sendMessage(msg).catch(() => {});
 }
 
@@ -135,30 +124,25 @@ function isEditable(target: EventTarget | null): boolean {
   );
 }
 
+const KEY_ACTIONS = {
+  Space: "toggle",
+  ArrowRight: "next",
+  ArrowLeft: "prev",
+} as const;
+
 function onKeydown(e: KeyboardEvent): void {
   if (!active || isEditable(e.target)) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
 
-  switch (e.code) {
-    case "Space":
-      e.preventDefault();
-      send({ type: "sr:control", action: "toggle" });
-      break;
-    case "ArrowRight":
-      e.preventDefault();
-      send({ type: "sr:control", action: "next" });
-      break;
-    case "ArrowLeft":
-      e.preventDefault();
-      send({ type: "sr:control", action: "prev" });
-      break;
-  }
+  const action = KEY_ACTIONS[e.code as keyof typeof KEY_ACTIONS];
+  if (!action) return;
+  e.preventDefault();
+  send({ type: "sr:control", action });
 }
 
-/** Click a sentence to jump there. */
+// Click a sentence → seek to it; never hijack real interactive elements.
 function onClick(e: MouseEvent): void {
   if (!active) return;
-  // Never hijack real interactions.
   if (
     e.defaultPrevented ||
     (e.target instanceof Element &&
@@ -175,7 +159,7 @@ function onClick(e: MouseEvent): void {
     try {
       return range.isPointInRange(caret.startContainer, caret.startOffset);
     } catch {
-      return false;
+      return false; // range detached by DOM changes since extraction
     }
   });
   if (index >= 0) send({ type: "sr:seek", index });
@@ -183,7 +167,7 @@ function onClick(e: MouseEvent): void {
 
 /* ---------- wiring ---------- */
 
-// Guard against double-injection: register listeners only once.
+// Register once — guards against double-injection.
 if (
   typeof chrome !== "undefined" &&
   chrome.runtime &&
