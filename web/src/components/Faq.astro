@@ -1,0 +1,57 @@
+---
+import { Icon } from "astro-icon/components";
+
+const faqs = [
+    {
+        q: "Is it free?",
+        a: "Yes. There may be a paid tier someday for the expensive parts, like audio — but the reader itself stays free.",
+    },
+    {
+        q: "What can I read with it?",
+        a: "Almost anything with an article on it: blogs, news, essays, newsletters. Paywalled pages only work if you already have access to them.",
+    },
+    {
+        q: "Do I need the extension?",
+        a: "No. Paste a link into the app and it works. The extension just saves you the copy-paste when you're already on the page.",
+    },
+    {
+        q: "Where does the audio come from?",
+        a: "It's generated with text-to-speech when you press play — no audio files to download or manage.",
+    },
+    {
+        q: "Is my reading list private?",
+        a: "Yes. Your library is yours alone. No feeds, no followers, nothing social.",
+    },
+];
+---
+
+<section
+    id="faq"
+    class="border-t border-border/60 px-6 py-20 sm:px-10 sm:py-24"
+>
+    <h2
+        class="text-center font-serif text-2xl font-medium tracking-tight text-foreground sm:text-3xl"
+    >
+        Questions
+    </h2>
+    <div class="mx-auto mt-10 max-w-2xl">
+        {
+            faqs.map((faq) => (
+                <details class="group border-b border-border">
+                    <summary class="flex cursor-pointer list-none items-center justify-between gap-4 py-5 [&::-webkit-details-marker]:hidden">
+                        <span class="font-serif text-lg text-foreground">
+                            {faq.q}
+                        </span>
+                        <Icon
+                            name="lucide:plus"
+                            class="size-4 shrink-0 text-primary transition-transform duration-200 ease-out group-open:rotate-45"
+                        />
+                    </summary>
+                    <p class="pb-6 text-sm leading-relaxed text-muted-foreground">
+                        {faq.a}
+                    </p>
+                </details>
+            ))
+        }
+    </div>
+</section>

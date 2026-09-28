@@ -1,0 +1,110 @@
+---
+import { Icon } from "astro-icon/components";
+
+const APP_URL = "#";
+const CHROME_STORE_URL = "#";
+---
+
+<section
+    class="grid gap-14 px-6 pt-16 pb-20 sm:px-10 sm:pt-24 sm:pb-28 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-16"
+>
+    <div>
+        <h1
+            class="animate-fade-in-up font-serif text-[2.75rem] leading-[1.08] font-medium tracking-tight text-foreground sm:text-[3.6rem] sm:leading-[1.05]"
+        >
+            The internet,
+            <br />
+            made <em
+                class="underline decoration-secondary/80 decoration-[3px] underline-offset-8"
+                >readable</em
+            >.
+        </h1>
+        <p
+            class="animate-fade-in-up [animation-delay:100ms] mt-7 max-w-md font-serif text-lg leading-relaxed text-muted-foreground"
+        >
+            Simple Reader turns any article into a clean page you can read, or
+            have read to you. Save things for later. That&rsquo;s the whole
+            idea.
+        </p>
+
+        <div
+            class="animate-fade-in-up [animation-delay:200ms] mt-10 flex flex-wrap items-center gap-6"
+        >
+            <a
+                href={APP_URL}
+                class="inline-flex items-center gap-2 rounded-xs bg-secondary px-6 py-3 text-base font-medium text-secondary-foreground transition-[background-color,transform] duration-150 ease-out hover:bg-secondary/85 active:scale-[0.98]"
+            >
+                Start reading
+                <Icon name="lucide:arrow-right" class="size-4" />
+            </a>
+            <a
+                href={CHROME_STORE_URL}
+                class="text-base text-foreground/80 underline decoration-border underline-offset-4 transition-colors duration-150 hover:text-foreground hover:decoration-primary"
+            >
+                Get the Chrome extension
+            </a>
+        </div>
+        <p
+            class="animate-fade-in [animation-delay:300ms] mt-5 text-sm text-muted-foreground/80"
+        >
+            Free. Works on most articles.
+        </p>
+    </div>
+
+    {/* Reader demo — a miniature of the actual reading view, mid-playback */}
+    <figure
+        class="animate-fade-in-up [animation-delay:200ms] border border-border/60 bg-card/50"
+    >
+        {/* Extracted article */}
+        <div class="px-6 pt-7 pb-6 sm:px-8 sm:pt-8">
+            <p class="text-xs text-muted-foreground">
+                blog.akdevv.com &middot; 6 min read
+            </p>
+            <div
+                class="mt-4 space-y-4 font-serif text-[1.15rem] leading-[1.75] text-foreground/75"
+            >
+                <p>
+                    I've tried a lot of reader extensions and most of them are
+                    bloated or want a subscription. This one is free, has no
+                    ads, and runs entirely on your own machine.
+                </p>
+                <p>
+                    <mark
+                        class="bg-secondary/15 box-decoration-clone px-1 text-foreground"
+                        >Honestly, the audio is what sold me. It actually
+                        sounds like a person reading to you.</mark
+                    >
+                    I use it every day now.
+                </p>
+            </div>
+        </div>
+
+        {/* Audio control bar */}
+        <div
+            class="flex items-center gap-3.5 border-t border-border/60 bg-background/40 px-5 py-3.5 sm:px-6"
+        >
+            <div
+                class="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-secondary"
+            >
+                <Icon name="lucide:pause" class="size-3 fill-current" />
+            </div>
+            <div class="relative h-1 min-w-0 flex-1 rounded-full bg-muted">
+                <div class="h-1 w-2/5 rounded-full bg-secondary/70"></div>
+                <div
+                    class="absolute top-1/2 left-2/5 size-2 -translate-1/2 rounded-full bg-secondary/80"
+                >
+                </div>
+            </div>
+            <span
+                class="shrink-0 text-[11px] text-muted-foreground tabular-nums"
+            >
+                2:41 / 6:12
+            </span>
+            <span
+                class="shrink-0 rounded-xs border border-border px-1.5 py-0.5 text-[11px] leading-none text-muted-foreground tabular-nums"
+            >
+                1&times;
+            </span>
+        </div>
+    </figure>
+</section>
