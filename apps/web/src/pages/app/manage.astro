@@ -1,0 +1,158 @@
+---
+import { actions } from "astro:actions";
+import { count, eq, sql } from "drizzle-orm";
+import AppShell from "@/components/AppShell.astro";
+import { db } from "@/db";
+import { article, category } from "@/db/schema";
+
+const userId = Astro.locals.user!.id;
+
+const [categories, tags] = await Promise.all([
+  db
+    .select({ id: category.id, name: category.name, n: count(article.id) })
+    .from(category)
+    .leftJoin(article, eq(article.categoryId, category.id))
+    .where(eq(category.userId, userId))
+    .groupBy(category.id)
+    .orderBy(category.name),
+  db.execute<{ tag: string; n: number }>(
+    sql`select tag, count(*)::int as n from ${article}, unnest(${article.tags}) as tag
+        where ${article.userId} = ${userId} group by tag order by tag`,
+  ),
+]);
+
+const error = [actions.renameTag, actions.renameCategory, actions.addCategory]
+  .map((a) => Astro.getActionResult(a)?.error)
+  .find(Boolean);
+
+const input =
+  "min-w-0 flex-1 rounded-xs border border-transparent bg-transparent px-2 py-1 outline-none hover:border-border focus:border-primary";
+const small = "text-xs text-muted-foreground hover:text-foreground";
+---
+
+<AppShell title="Tags & categories">
+  <h1 class="font-serif text-3xl font-medium">Tags & categories</h1>
+  <p class="mt-2 text-sm text-muted-foreground">
+    Edit a name and press Enter to rename. Renaming onto an existing name merges
+    the two.
+  </p>
+  {error && (
+    <p class="mt-4 text-sm text-red-400" role="alert">
+      {error.message}
+    </p>
+  )}
+
+  <div class="mt-10 grid gap-12 md:grid-cols-2">
+    <section>
+      <h2 class="text-sm font-medium tracking-wide text-muted-foreground uppercase">
+        Categories
+      </h2>
+      <ul class="mt-3 divide-y divide-border/60">
+        {categories.map((c) => (
+          <li class="flex items-center gap-2 py-1.5">
+            <form
+              method="POST"
+              action={actions.renameCategory}
+              class="flex flex-1"
+            >
+              <input type="hidden" name="id" value={c.id} />
+              <input
+                name="name"
+                value={c.name}
+                required
+                maxlength="40"
+                aria-label={`Rename ${c.name}`}
+                class={input}
+              />
+            </form>
+            <a
+              href={`/app?status=all&category=${encodeURIComponent(c.name)}`}
+              class={small}
+            >
+              {c.n}
+            </a>
+            {c.name !== "Other" && (
+              <form method="POST" action={actions.deleteCategory}>
+                <input type="hidden" name="id" value={c.id} />
+                <button
+                  data-confirm={`Delete "${c.name}"? Its articles move to Other.`}
+                  class={`${small} hover:text-red-400`}
+                >
+                  Delete
+                </button>
+              </form>
+            )}
+          </li>
+        ))}
+      </ul>
+      <form method="POST" action={actions.addCategory} class="mt-3 flex gap-2">
+        <input
+          name="name"
+          required
+          maxlength="40"
+          placeholder="New category"
+          aria-label="New category"
+          class={`${input} border-border`}
+        />
+        <button class="rounded-xs border border-border px-3 text-sm hover:border-primary">
+          Add
+        </button>
+      </form>
+    </section>
+
+    <section>
+      <h2 class="text-sm font-medium tracking-wide text-muted-foreground uppercase">
+        Tags
+      </h2>
+      {tags.length === 0 ? (
+        <p class="mt-3 text-sm text-muted-foreground">No tags yet.</p>
+      ) : (
+        <ul class="mt-3 divide-y divide-border/60">
+          {tags.map((t) => (
+            <li class="flex items-center gap-2 py-1.5">
+              <form
+                method="POST"
+                action={actions.renameTag}
+                class="flex flex-1"
+              >
+                <input type="hidden" name="from" value={t.tag} />
+                <input
+                  name="to"
+                  value={t.tag}
+                  required
+                  maxlength="40"
+                  aria-label={`Rename ${t.tag}`}
+                  class={input}
+                />
+              </form>
+              <a
+                href={`/app?status=all&tag=${encodeURIComponent(t.tag)}`}
+                class={small}
+              >
+                {t.n}
+              </a>
+              <form method="POST" action={actions.deleteTag}>
+                <input type="hidden" name="tag" value={t.tag} />
+                <button
+                  data-confirm={`Remove #${t.tag} from all articles?`}
+                  class={`${small} hover:text-red-400`}
+                >
+                  Delete
+                </button>
+              </form>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  </div>
+</AppShell>
+
+<script>
+  for (const b of document.querySelectorAll<HTMLButtonElement>(
+    "[data-confirm]",
+  ))
+    b.addEventListener("click", (e) => {
+      if (!confirm(b.dataset.confirm)) e.preventDefault();
+    });
+</script>

@@ -1,0 +1,99 @@
+---
+import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
+import AppShell from "@/components/AppShell.astro";
+import { db } from "@/db";
+import { article, highlight } from "@/db/schema";
+
+const userId = Astro.locals.user!.id;
+const q = Astro.url.searchParams.get("q")?.trim().slice(0, 200) ?? "";
+
+const where: SQL[] = [eq(highlight.userId, userId)];
+if (q)
+  where.push(sql`${highlight.search} @@ websearch_to_tsquery('english', ${q})`);
+
+// ponytail: newest 500, no pagination
+const rows = await db
+  .select({
+    id: highlight.id,
+    quote: highlight.quote,
+    note: highlight.note,
+    articleId: article.id,
+    title: article.title,
+    siteName: article.siteName,
+  })
+  .from(highlight)
+  .innerJoin(article, eq(article.id, highlight.articleId))
+  .where(and(...where))
+  .orderBy(desc(article.createdAt), asc(highlight.start))
+  .limit(500);
+
+// group by article, keeping the order above
+const groups = new Map<
+  string,
+  { title: string; siteName: string | null; items: typeof rows }
+>();
+for (const r of rows) {
+  const g = groups.get(r.articleId) ?? {
+    title: r.title,
+    siteName: r.siteName,
+    items: [],
+  };
+  g.items.push(r);
+  groups.set(r.articleId, g);
+}
+---
+
+<AppShell title="Notes">
+  <h1 class="font-serif text-3xl font-medium">Highlights & notes</h1>
+  <form method="GET" class="mt-6 flex gap-2">
+    <input
+      type="search"
+      name="q"
+      value={q}
+      placeholder='Search highlights and notes: words, "exact phrase", -exclude'
+      aria-label="Search highlights and notes"
+      class="min-w-0 flex-1 rounded-xs border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
+    />
+    <button class="rounded-xs border border-border px-4 text-sm hover:border-primary">
+      Search
+    </button>
+  </form>
+
+  {groups.size === 0 ? (
+    <p class="mt-10 text-muted-foreground">
+      {q
+        ? "Nothing matches."
+        : "No highlights yet. Select text in any article to highlight it."}
+    </p>
+  ) : (
+    <div class="mt-10 space-y-12">
+      {[...groups].map(([articleId, g]) => (
+        <section>
+          <p class="text-xs text-muted-foreground">{g.siteName}</p>
+          <h2 class="mt-1 font-serif text-xl font-medium">
+            <a href={`/app/a/${articleId}`} class="hover:text-primary">
+              {g.title}
+            </a>
+          </h2>
+          <ul class="mt-4 space-y-4">
+            {g.items.map((h) => (
+              <li>
+                <a
+                  href={`/app/a/${articleId}#h-${h.id}`}
+                  class="block border-l-2 border-primary/60 pl-4 font-serif text-foreground/85 hover:border-primary"
+                >
+                  {h.quote}
+                </a>
+                {h.note && (
+                  <p class="mt-2 pl-4 text-sm whitespace-pre-line text-muted-foreground">
+                    {h.note}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  )}
+</AppShell>

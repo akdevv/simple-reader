@@ -1,0 +1,28 @@
+{
+  "name": "@sr/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tts-assets": "./tts-assets.ts"
+  },
+  "scripts": {
+    "dev": "vite --config dev/vite.config.ts",
+    "typecheck": "tsc",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "happy-dom": "^20.14.6",
+    "linkedom": "^0.18.13",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  },
+  "dependencies": {
+    "@diffusionstudio/piper-wasm": "1.0.0",
+    "@mintplex-labs/piper-tts-web": "1.0.4",
+    "@mozilla/readability": "^0.6.0",
+    "onnxruntime-web": "1.18.0"
+  }
+}

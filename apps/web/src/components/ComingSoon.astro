@@ -1,0 +1,41 @@
+---
+import Base from "@/layouts/Base.astro";
+
+interface Props {
+  title: string;
+  /** Plan phase that builds this page. */
+  phase: number;
+  description: string;
+}
+
+const { title, phase, description } = Astro.props;
+
+const links = [
+  ["/", "Home"],
+  ["/login", "Sign in"],
+  ["/app", "Library"],
+  ["/app/a/demo", "Reader"],
+  ["/app/notes", "Notes"],
+  ["/app/manage", "Tags & categories"],
+];
+---
+
+<Base title={title}>
+  <main class="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-4 px-4">
+    <p class="text-sm tracking-widest text-muted-foreground uppercase">
+      Coming soon · phase {phase}
+    </p>
+    <h1 class="font-serif text-4xl">{title}</h1>
+    <p class="text-muted-foreground">{description}</p>
+    <nav class="mt-6 flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground">
+      {links.map(([href, label]) => (
+        <a
+          href={href}
+          class="underline-offset-4 hover:text-foreground hover:underline"
+        >
+          {label}
+        </a>
+      ))}
+    </nav>
+  </main>
+</Base>

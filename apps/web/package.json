@@ -1,0 +1,41 @@
+{
+  "name": "sr-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "typecheck": "astro check",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "test": "vitest run",
+    "db:backfill": "node scripts/backfill-embeddings.ts"
+  },
+  "dependencies": {
+    "@astrojs/vercel": "^11.0.11",
+    "@huggingface/transformers": "^4.3.1",
+    "@iconify-json/lucide": "^1.2.142",
+    "@sr/core": "workspace:*",
+    "@tailwindcss/vite": "^4.3.3",
+    "@vercel/functions": "^3.9.11",
+    "astro": "^7.3.5",
+    "astro-icon": "^1.2.0",
+    "better-auth": "^1.7.7",
+    "drizzle-orm": "^0.45.4",
+    "linkedom": "^0.18.13",
+    "parse5": "^8.0.1",
+    "postgres": "^3.4.9",
+    "sanitize-html": "^2.18.0",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@types/sanitize-html": "^2.16.2",
+    "drizzle-kit": "^0.31.11",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.2"
+  }
+}

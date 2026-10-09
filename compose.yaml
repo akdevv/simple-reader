@@ -1,0 +1,12 @@
+# Local dev database: `docker compose up -d`. Prod uses Neon (same Postgres + pgvector).
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    ports: ["5433:5432"]
+    environment:
+      POSTGRES_USER: sr
+      POSTGRES_PASSWORD: sr
+      POSTGRES_DB: sr
+    volumes: [db:/var/lib/postgresql/data]
+volumes:
+  db:

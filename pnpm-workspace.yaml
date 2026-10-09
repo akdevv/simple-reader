@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+  - packages/*
+onlyBuiltDependencies:
+  - esbuild
+overrides:
+  # ponytail: 1.2.4 is published with os: [linux], so pnpm skips it on macOS and
+  # `astro check` (via @astrojs/astro2tsx) crashes. Drop once upstream fixes it.
+  "@napi-rs/wasm-runtime": 1.2.3

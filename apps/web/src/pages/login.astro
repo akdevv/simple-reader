@@ -1,0 +1,166 @@
+---
+import { Icon } from "astro-icon/components";
+import Base from "@/layouts/Base.astro";
+import { socialProviders } from "@/lib/auth";
+
+const next = Astro.url.searchParams.get("next");
+// only same-site paths, never an open redirect
+const callbackURL =
+  next?.startsWith("/") && !next.startsWith("//") ? next : "/app";
+const labels = { google: "Google", github: "GitHub" };
+const input =
+  "w-full rounded-xs border border-border bg-card px-3 py-2.5 outline-none focus:border-primary";
+---
+
+<Base title="Sign in">
+  <main class="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-8 px-4">
+    <a href="/" class="flex items-center gap-2.5">
+      <Icon name="lucide:quote" class="size-6 text-primary" />
+      <span class="font-serif text-lg font-semibold tracking-tight italic">
+        simple reader
+      </span>
+    </a>
+
+    <form
+      id="auth"
+      data-callback={callbackURL}
+      data-mode="sign-in"
+      class="group flex flex-col gap-3"
+    >
+      <h1 class="font-serif text-3xl font-medium">
+        <span class="group-data-[mode=sign-up]:hidden">Sign in</span>
+        <span class="hidden group-data-[mode=sign-up]:inline">
+          Create account
+        </span>
+      </h1>
+      <label class="hidden flex-col gap-1 text-sm group-data-[mode=sign-up]:flex">
+        Name
+        <input name="name" autocomplete="name" maxlength="100" class={input} />
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        Email
+        <input
+          name="email"
+          type="email"
+          required
+          autocomplete="email"
+          class={input}
+        />
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        Password
+        <input
+          name="password"
+          type="password"
+          required
+          minlength="8"
+          maxlength="128"
+          autocomplete="current-password"
+          class={input}
+        />
+      </label>
+      <button class="mt-2 rounded-xs bg-secondary px-4 py-3 font-medium text-secondary-foreground transition-colors hover:bg-secondary/85 disabled:opacity-60">
+        <span class="group-data-[mode=sign-up]:hidden">Sign in</span>
+        <span class="hidden group-data-[mode=sign-up]:inline">
+          Create account
+        </span>
+      </button>
+      <p id="error" class="text-sm text-red-400" role="alert"></p>
+      <button
+        type="button"
+        id="switch"
+        class="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+      >
+        <span class="group-data-[mode=sign-up]:hidden">
+          No account? Create one
+        </span>
+        <span class="hidden group-data-[mode=sign-up]:inline">
+          Have an account? Sign in
+        </span>
+      </button>
+    </form>
+
+    {socialProviders.length > 0 && (
+      <div class="flex flex-col gap-3 border-t border-border/60 pt-6">
+        {socialProviders.map((p) => (
+          <button
+            data-provider={p}
+            class="rounded-xs border border-border bg-card px-4 py-3 transition-colors hover:border-primary disabled:opacity-60"
+          >
+            Continue with {labels[p]}
+          </button>
+        ))}
+      </div>
+    )}
+  </main>
+</Base>
+
+<script>
+  const form = document.getElementById("auth") as HTMLFormElement;
+  const error = document.getElementById("error")!;
+  const callbackURL = form.dataset.callback!;
+
+  async function post(path: string, body: object): Promise<{ url?: string }> {
+    const res = await fetch(`/api/auth/${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message ?? "Something went wrong");
+    return data;
+  }
+
+  async function run(button: HTMLButtonElement, fn: () => Promise<void>) {
+    button.disabled = true;
+    error.textContent = "";
+    try {
+      await fn();
+    } catch (err) {
+      error.textContent = err instanceof Error ? err.message : String(err);
+      button.disabled = false;
+    }
+  }
+
+  document.getElementById("switch")!.addEventListener("click", () => {
+    const signUp = form.dataset.mode === "sign-in";
+    form.dataset.mode = signUp ? "sign-up" : "sign-in";
+    (form.elements.namedItem("name") as HTMLInputElement).required = signUp;
+    (form.elements.namedItem("password") as HTMLInputElement).autocomplete =
+      signUp ? "new-password" : "current-password";
+    error.textContent = "";
+  });
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(form)) as Record<
+      string,
+      string
+    >;
+    run(e.submitter as HTMLButtonElement, async () => {
+      if (form.dataset.mode === "sign-up")
+        await post("sign-up/email", { ...data, callbackURL });
+      else
+        await post("sign-in/email", {
+          email: data.email,
+          password: data.password,
+          callbackURL,
+        });
+      location.href = callbackURL;
+    });
+  });
+
+  for (const button of document.querySelectorAll<HTMLButtonElement>(
+    "[data-provider]",
+  )) {
+    button.addEventListener("click", () =>
+      run(button, async () => {
+        const { url } = await post("sign-in/social", {
+          provider: button.dataset.provider,
+          callbackURL,
+        });
+        if (url) location.href = url;
+      }),
+    );
+  }
+</script>

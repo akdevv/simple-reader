@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>sr core playground</title>
+    <style>
+      body {
+        font:
+          18px/1.6 Georgia,
+          serif;
+        max-width: 40rem;
+        margin: 3rem auto;
+        padding: 0 1rem;
+      }
+      ::highlight(sr-sentence) {
+        background: #fde68a;
+      }
+      #state {
+        font:
+          13px ui-monospace,
+          monospace;
+        color: #555;
+      }
+    </style>
+  </head>
+  <body>
+    <article id="article">
+      <h2>Why sleep matters</h2>
+      <p>
+        Sleep is not idle time. While you rest, the brain sorts the day's
+        memories and clears out waste. Dr. Smith calls it "the most productive
+        thing you do all day."
+      </p>
+      <p>
+        Most adults need about 7.5 hours a night. Fewer than that, and the
+        effects add up: slower reactions, worse mood, e.g. more irritability.
+      </p>
+    </article>
+    <p>
+      <button id="toggle">Play / pause</button>
+      <button id="prev">Prev</button>
+      <button id="next">Next</button>
+      <select id="speed"></select>
+    </p>
+    <pre id="state"></pre>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

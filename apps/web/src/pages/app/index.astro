@@ -1,0 +1,276 @@
+---
+import { actions } from "astro:actions";
+import AppShell from "@/components/AppShell.astro";
+import { parseFilters, snippetHtml, type Filters } from "@/lib/filters";
+import { userCategories, userTags } from "@/lib/library";
+import { searchArticles, userSites } from "@/lib/search";
+
+const userId = Astro.locals.user!.id;
+const f = parseFilters(Astro.url.searchParams);
+const saved = Astro.getActionResult(actions.saveArticles);
+
+const [articles, categories, tags, sites] = await Promise.all([
+  searchArticles(userId, f),
+  userCategories(userId),
+  userTags(userId),
+  userSites(userId),
+]);
+
+/** Current URL with some filters changed; empty values are dropped. */
+function href(patch: Partial<Filters>): string {
+  const next = { ...f, ...patch };
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(next))
+    if (
+      v &&
+      !(k === "status" && v === "todo") &&
+      !(k === "sort" && v === (next.q ? "relevance" : "newest"))
+    )
+      params.set(k, v);
+  const qs = params.toString();
+  return qs ? `/app?${qs}` : "/app";
+}
+
+const filtered = !!(f.q || f.category || f.tag || f.site);
+const minutes = (words: number) => Math.max(1, Math.round(words / 230));
+const tab = (active: boolean) =>
+  active
+    ? "border-b-2 border-primary pb-2 text-foreground"
+    : "pb-2 text-muted-foreground hover:text-foreground";
+const field =
+  "rounded-xs border border-border bg-card px-2 py-1.5 text-sm outline-none focus:border-primary";
+const failed = saved?.data?.filter((r) => r.status === "failed") ?? [];
+const added = saved?.data?.filter((r) => r.status === "saved").length ?? 0;
+const dupes = saved?.data?.filter((r) => r.status === "duplicate").length ?? 0;
+---
+
+<AppShell title="Library">
+  <form
+    method="POST"
+    action={actions.saveArticles}
+    id="save"
+    class="flex items-start gap-2"
+  >
+    <textarea
+      name="urls"
+      required
+      rows="1"
+      placeholder="Paste a link to save it (or up to 20, one per line)"
+      aria-label="Article links"
+      class="field-sizing-content max-h-60 min-w-0 flex-1 resize-none rounded-xs border border-border bg-card px-3 py-2.5 outline-none focus:border-primary"
+    ></textarea>
+    <button class="rounded-xs bg-secondary px-5 py-2.5 font-medium text-secondary-foreground transition-colors hover:bg-secondary/85 disabled:opacity-60">
+      Save
+    </button>
+  </form>
+  {saved?.error && (
+    <p class="mt-3 text-sm text-red-400" role="alert">
+      {saved.error.message}
+    </p>
+  )}
+  {saved?.data && (
+    <div class="mt-3 text-sm" role="status">
+      <p class="text-muted-foreground">
+        {[
+          added && `${added} saved`,
+          dupes && `${dupes} already in your library`,
+          failed.length && `${failed.length} failed`,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+        {saved.data.length === 1 && saved.data[0]!.status !== "failed" && (
+          <>
+            {" · "}
+            <a
+              href={`/app/a/${(saved.data[0] as { id: string }).id}`}
+              class="text-primary underline"
+            >
+              Open it
+            </a>
+          </>
+        )}
+      </p>
+      {failed.length > 0 && (
+        <ul class="mt-2 space-y-1 text-red-400">
+          {failed.map((r) => (
+            <li class="break-all">
+              {r.url}: {"error" in r && r.error}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )}
+
+  <form
+    method="GET"
+    action="/app"
+    class="mt-10 flex flex-wrap items-center gap-2"
+  >
+    <input
+      type="search"
+      name="q"
+      value={f.q}
+      placeholder='Search: words, "exact phrase", -exclude'
+      aria-label="Search"
+      class={`${field} min-w-48 flex-1 py-2`}
+    />
+    {f.status !== "todo" && (
+      <input type="hidden" name="status" value={f.status} />
+    )}
+    <select name="category" aria-label="Category" class={field}>
+      <option value="">All categories</option>
+      {categories.map((c) => (
+        <option selected={c.name === f.category}>{c.name}</option>
+      ))}
+    </select>
+    <select name="tag" aria-label="Tag" class={field}>
+      <option value="">All tags</option>
+      {tags.map((t) => (
+        <option selected={t === f.tag}>{t}</option>
+      ))}
+    </select>
+    <select name="site" aria-label="Site" class={`${field} max-w-44`}>
+      <option value="">All sites</option>
+      {sites.map((s) => (
+        <option selected={s === f.site}>{s}</option>
+      ))}
+    </select>
+    <select name="sort" aria-label="Sort" class={field}>
+      {f.q && (
+        <option value="relevance" selected={f.sort === "relevance"}>
+          Best match
+        </option>
+      )}
+      <option value="newest" selected={f.sort === "newest"}>
+        Newest
+      </option>
+      <option value="oldest" selected={f.sort === "oldest"}>
+        Oldest
+      </option>
+    </select>
+    <button class={`${field} hover:border-primary`}>Search</button>
+    {filtered && (
+      <a
+        href={href({ q: "", category: "", tag: "", site: "", sort: "newest" })}
+        class="text-sm text-muted-foreground hover:text-foreground"
+      >
+        Clear
+      </a>
+    )}
+  </form>
+
+  <nav class="mt-8 flex gap-6 border-b border-border/60 text-sm">
+    <a href={href({ status: "todo" })} class={tab(f.status === "todo")}>
+      To read
+    </a>
+    <a href={href({ status: "done" })} class={tab(f.status === "done")}>
+      Done
+    </a>
+    <a href={href({ status: "all" })} class={tab(f.status === "all")}>
+      All
+    </a>
+  </nav>
+
+  {articles.length === 0 ? (
+    <p class="mt-10 text-muted-foreground">
+      {filtered
+        ? "Nothing matches."
+        : f.status === "done"
+          ? "Nothing finished yet."
+          : "No articles yet. Paste a link above."}
+    </p>
+  ) : (
+    <ul class="divide-y divide-border/60">
+      {articles.map((a) => (
+        <li class="flex items-start gap-4 py-5">
+          <div class="min-w-0 flex-1">
+            <p class="text-xs text-muted-foreground">
+              <a
+                href={href({ site: a.siteName ?? "" })}
+                class="hover:text-foreground"
+              >
+                {a.siteName}
+              </a>
+              {" · "}
+              {minutes(a.wordCount)} min
+              {a.status === "reading" && " · in progress"}
+              {a.status === "done" && " · done"}
+            </p>
+            <a href={`/app/a/${a.id}`} class="group">
+              <h2 class="mt-1 font-serif text-lg leading-snug font-medium group-hover:text-primary">
+                {a.title}
+              </h2>
+            </a>
+            {a.snippet ? (
+              <p
+                class="mt-1 text-sm text-muted-foreground [&_mark]:bg-secondary/20 [&_mark]:text-foreground"
+                set:html={`…${snippetHtml(a.snippet)}…`}
+              />
+            ) : (
+              a.excerpt && (
+                <p class="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                  {a.excerpt}
+                </p>
+              )
+            )}
+            <p class="mt-2 flex flex-wrap gap-1.5 text-xs">
+              {a.category && (
+                <a
+                  href={href({ category: a.category })}
+                  class="rounded-xs bg-primary/15 px-1.5 py-0.5 text-primary hover:bg-primary/25"
+                >
+                  {a.category}
+                </a>
+              )}
+              {a.tags.map((t) => (
+                <a
+                  href={href({ tag: t })}
+                  class="rounded-xs bg-muted px-1.5 py-0.5 text-muted-foreground hover:text-foreground"
+                >
+                  #{t}
+                </a>
+              ))}
+            </p>
+          </div>
+          <form method="POST" class="flex shrink-0 gap-3 pt-5 text-xs">
+            <input type="hidden" name="id" value={a.id} />
+            <input
+              type="hidden"
+              name="status"
+              value={a.status === "done" ? "unread" : "done"}
+            />
+            <button
+              formaction={actions.setStatus}
+              class="text-muted-foreground hover:text-foreground"
+            >
+              {a.status === "done" ? "Mark unread" : "Mark done"}
+            </button>
+            <button
+              formaction={actions.deleteArticle}
+              data-confirm="Delete this article?"
+              class="text-muted-foreground hover:text-red-400"
+            >
+              Delete
+            </button>
+          </form>
+        </li>
+      ))}
+    </ul>
+  )}
+</AppShell>
+
+<script>
+  // Fetching pages can take a while: show it's working.
+  document.getElementById("save")!.addEventListener("submit", (e) => {
+    const button = (e.target as HTMLFormElement).querySelector("button")!;
+    button.disabled = true;
+    button.textContent = "Saving…";
+  });
+  for (const b of document.querySelectorAll<HTMLButtonElement>(
+    "[data-confirm]",
+  ))
+    b.addEventListener("click", (e) => {
+      if (!confirm(b.dataset.confirm)) e.preventDefault();
+    });
+</script>

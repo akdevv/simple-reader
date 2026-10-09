@@ -1,0 +1,308 @@
+---
+import { Icon } from "astro-icon/components";
+import { and, eq } from "drizzle-orm";
+import { actions } from "astro:actions";
+import { SPEEDS } from "@sr/core";
+import AppShell from "@/components/AppShell.astro";
+import { db } from "@/db";
+import { article, highlight } from "@/db/schema";
+import { userCategories, userTags } from "@/lib/library";
+import { relatedArticles } from "@/lib/search";
+
+const { id } = Astro.params;
+const isUuid = /^[0-9a-f-]{36}$/i.test(id ?? "");
+const [a] = isUuid
+  ? await db
+      .select()
+      .from(article)
+      .where(
+        and(eq(article.id, id!), eq(article.userId, Astro.locals.user!.id)),
+      )
+  : [];
+if (!a) return new Response("Not found", { status: 404 });
+
+const [categories, allTags, highlights, related] = await Promise.all([
+  userCategories(a.userId),
+  userTags(a.userId),
+  db
+    .select({
+      id: highlight.id,
+      start: highlight.start,
+      end: highlight.end,
+      quote: highlight.quote,
+      note: highlight.note,
+    })
+    .from(highlight)
+    .where(eq(highlight.articleId, a.id)),
+  relatedArticles(a.userId, a.id),
+]);
+const tagError = Astro.getActionResult(actions.addTag)?.error;
+const minutes = Math.max(1, Math.round(a.wordCount / 230));
+const chip = "rounded-xs bg-muted px-1.5 py-0.5";
+const iconButton =
+  "flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground";
+---
+
+<AppShell title={a.title}>
+  <div class="mx-auto max-w-2xl pb-32">
+    <a href="/app" class="text-sm text-muted-foreground hover:text-foreground">
+      ← Library
+    </a>
+    <header class="mt-8">
+      <p class="text-sm text-muted-foreground">
+        <a
+          href={a.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="hover:text-primary"
+        >
+          {a.siteName}
+        </a>
+        {a.byline && <> · {a.byline}</>} · {minutes} min read
+      </p>
+      <h1 class="mt-3 font-serif text-4xl leading-tight font-medium">
+        {a.title}
+      </h1>
+
+      <div class="mt-5 flex flex-wrap items-center gap-2 text-xs">
+        <form method="POST" action={actions.setCategory} class="contents">
+          <input type="hidden" name="id" value={a.id} />
+          <select
+            name="categoryId"
+            aria-label="Category"
+            data-autosubmit
+            class="rounded-xs border border-border bg-card px-1.5 py-1 text-primary"
+          >
+            {categories.map((c) => (
+              <option value={c.id} selected={c.id === a.categoryId}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <noscript>
+            <button>Set</button>
+          </noscript>
+        </form>
+        <form method="POST" action={actions.recategorize} class="contents">
+          <input type="hidden" name="id" value={a.id} />
+          <button
+            title={
+              a.categorySource === "manual"
+                ? "You picked this category. Let the AI choose again."
+                : "Ask the AI to choose again"
+            }
+            class="text-muted-foreground hover:text-foreground"
+          >
+            ↻ Auto
+          </button>
+        </form>
+        {a.tags.map((t) => (
+          <form
+            method="POST"
+            action={actions.removeTag}
+            class={`${chip} flex items-center gap-1 text-muted-foreground`}
+          >
+            <input type="hidden" name="id" value={a.id} />
+            <input type="hidden" name="tag" value={t} />
+            <a
+              href={`/app?tag=${encodeURIComponent(t)}`}
+              class="hover:text-foreground"
+            >
+              #{t}
+            </a>
+            <button aria-label={`Remove tag ${t}`} class="hover:text-red-400">
+              ×
+            </button>
+          </form>
+        ))}
+        <form method="POST" action={actions.addTag} class="contents">
+          <input type="hidden" name="id" value={a.id} />
+          <input
+            name="tag"
+            list="all-tags"
+            required
+            maxlength="40"
+            placeholder="+ tag"
+            aria-label="Add tag"
+            class="w-24 rounded-xs border border-transparent bg-transparent px-1.5 py-0.5 outline-none focus:border-border"
+          />
+          <datalist id="all-tags">
+            {allTags
+              .filter((t) => !a.tags.includes(t))
+              .map((t) => (
+                <option value={t} />
+              ))}
+          </datalist>
+        </form>
+        {tagError && <span class="text-red-400">{tagError.message}</span>}
+        <button
+          id="copy-highlights"
+          data-title={a.title}
+          data-url={a.url}
+          class="ml-auto text-muted-foreground hover:text-foreground"
+        >
+          Copy highlights
+        </button>
+      </div>
+    </header>
+    <article
+      id="content"
+      class="reader-body mt-10"
+      data-id={a.id}
+      data-position={a.position}
+      data-highlights={JSON.stringify(highlights)}
+      set:html={a.contentHtml}
+    />
+    {related.length > 0 && (
+      <aside class="mt-16 border-t border-border/60 pt-8">
+        <h2 class="text-sm font-medium tracking-wide text-muted-foreground uppercase">
+          Related in your library
+        </h2>
+        <ul class="mt-4 space-y-3">
+          {related.map((r) => (
+            <li>
+              <a href={`/app/a/${r.id}`} class="group block">
+                <span class="font-serif text-lg group-hover:text-primary">
+                  {r.title}
+                </span>
+                <span class="ml-2 text-xs text-muted-foreground">
+                  {r.siteName}
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </aside>
+    )}
+  </div>
+
+  <div class="fixed inset-x-0 bottom-0 border-t border-border/60 bg-background/95 backdrop-blur">
+    <div class="mx-auto flex max-w-2xl items-center gap-2 px-4 py-3">
+      <button id="prev" class={iconButton} aria-label="Previous sentence">
+        <Icon name="lucide:skip-back" class="size-4" />
+      </button>
+      <button
+        id="toggle"
+        class="flex size-11 items-center justify-center rounded-full bg-secondary text-secondary-foreground transition-transform active:scale-95"
+        aria-label="Play"
+      >
+        <Icon name="lucide:play" id="icon-play" class="size-5 fill-current" />
+        <Icon
+          name="lucide:pause"
+          id="icon-pause"
+          class="hidden size-5 fill-current"
+        />
+      </button>
+      <button id="next" class={iconButton} aria-label="Next sentence">
+        <Icon name="lucide:skip-forward" class="size-4" />
+      </button>
+      <p
+        id="status"
+        class="ml-2 min-w-0 flex-1 truncate text-xs text-muted-foreground tabular-nums"
+        aria-live="polite"
+      ></p>
+      <select
+        id="speed"
+        aria-label="Speed"
+        class="rounded-xs border border-border bg-card px-1.5 py-1 text-xs tabular-nums"
+      >
+        {SPEEDS.map((s) => (
+          <option value={s} selected={s === 1}>
+            {s}×
+          </option>
+        ))}
+      </select>
+    </div>
+  </div>
+</AppShell>
+
+<script>
+  import { actions } from "astro:actions";
+  import { createPlayer, mountReader, SPEEDS, type Speed } from "@sr/core";
+  import { mountHighlights } from "@/scripts/highlights";
+
+  const $ = (id: string) => document.getElementById(id)!;
+  const content = $("content");
+  const id = content.dataset.id!;
+  const player = createPlayer({ assetBase: "/tts/" });
+
+  const speedSelect = $("speed") as HTMLSelectElement;
+  let speed: Speed = 1;
+  try {
+    const stored = Number(localStorage.getItem("sr:speed"));
+    if ((SPEEDS as readonly number[]).includes(stored)) speed = stored as Speed;
+  } catch {
+    // storage blocked: default speed
+  }
+  speedSelect.value = String(speed);
+  player.setSpeed(speed);
+  speedSelect.addEventListener("change", () => {
+    player.setSpeed(Number(speedSelect.value) as Speed);
+    try {
+      localStorage.setItem("sr:speed", speedSelect.value);
+    } catch {
+      // ignore
+    }
+  });
+
+  let saved = Number(content.dataset.position);
+  mountReader(content, player, {
+    startAt: saved,
+    onState(state) {
+      const playing = state.phase === "playing" || state.phase === "generating";
+      $("icon-play").classList.toggle("hidden", playing);
+      $("icon-pause").classList.toggle("hidden", !playing);
+      $("toggle").setAttribute("aria-label", playing ? "Pause" : "Play");
+      $("status").textContent =
+        state.phase === "loading-model"
+          ? `Downloading voice… ${state.modelProgress}%`
+          : state.phase === "error"
+            ? `Audio failed: ${state.error}`
+            : state.phase === "done"
+              ? "Finished"
+              : state.total
+                ? `${state.index + 1} / ${state.total}`
+                : "";
+
+      // ponytail: one tiny write per sentence; debounce if it ever shows up in DB load
+      if (state.phase === "done") {
+        saved = 0;
+        actions.savePosition({ id, position: 0, done: true });
+      } else if (
+        state.index >= 0 &&
+        state.index !== saved &&
+        state.phase !== "paused"
+      ) {
+        saved = state.index;
+        actions.savePosition({ id, position: state.index });
+      }
+    },
+  });
+
+  const notes = mountHighlights(
+    content,
+    id,
+    JSON.parse(content.dataset.highlights!),
+  );
+  const copy = $("copy-highlights");
+  copy.addEventListener("click", async () => {
+    const body = notes.markdown();
+    const md = `# ${copy.dataset.title}\n\n<${copy.dataset.url}>\n\n${body}\n`;
+    try {
+      await navigator.clipboard.writeText(md);
+      copy.textContent = body ? "Copied" : "No highlights yet";
+    } catch {
+      copy.textContent = "Copy failed";
+    }
+    setTimeout(() => (copy.textContent = "Copy highlights"), 1500);
+  });
+
+  for (const el of document.querySelectorAll<HTMLSelectElement>(
+    "[data-autosubmit]",
+  ))
+    el.addEventListener("change", () => el.form!.requestSubmit());
+
+  $("toggle").addEventListener("click", () => player.toggle());
+  $("prev").addEventListener("click", () => player.prev());
+  $("next").addEventListener("click", () => player.next());
+</script>

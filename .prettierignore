@@ -1,0 +1,6 @@
+old-code/
+pnpm-lock.yaml
+dist/
+.astro/
+.vercel/
+**/drizzle/meta/
